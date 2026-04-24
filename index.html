@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WerkstattCheck</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section class="auth-screen" id="authScreen">
+      <form class="auth-card" id="loginForm">
+        <h1>WerkstattCheck Login</h1>
+        <p>Melde dich als Chef oder Mitarbeiter an.</p>
+        <label>
+          Benutzername
+          <input id="loginUsername" name="username" type="text" placeholder="z. B. chef" required />
+        </label>
+        <label>
+          Passwort
+          <input id="loginPassword" name="password" type="password" placeholder="Passwort" required />
+        </label>
+        <button class="primary-button" type="submit">Anmelden</button>
+        <small class="auth-hint">Demo-Zugänge: chef/chef123 oder mitarbeiter/mitarbeiter123</small>
+      </form>
+    </section>
+
+    <div class="app-shell hidden" id="appShell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img">
+              <path d="M14.7 5.3a4.4 4.4 0 0 0-5.4 5.4L3.6 16.4a2.8 2.8 0 0 0 4 4l5.7-5.7a4.4 4.4 0 0 0 5.4-5.4l-3.1 3.1-4-4 3.1-3.1Z" />
+            </svg>
+          </div>
+          <div>
+            <p>WerkstattCheck</p>
+            <span>Prüfberichte für Handwerksbetriebe</span>
+          </div>
+        </div>
+
+        <div class="session-card">
+          <p>Angemeldet als</p>
+          <strong id="sessionUser">-</strong>
+          <button class="secondary-button" id="logoutButton" type="button">Abmelden</button>
+        </div>
+
+        <div class="stats">
+          <div>
+            <span id="statDrafts">0</span>
+            <p>Entwürfe</p>
+          </div>
+          <div>
+            <span id="statSubmitted">0</span>
+            <p>Zur Prüfung</p>
+          </div>
+          <div>
+            <span id="statApproved">0</span>
+            <p>Freigegeben</p>
+          </div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="roleEyebrow">Mitarbeiterbereich</p>
+            <h1 id="pageTitle">Checkliste ausfüllen</h1>
+          </div>
+          <div class="status-pill" id="emailStatus">
+            <span class="dot"></span>
+            E-Mail-Automatik bereit
+          </div>
+        </header>
+
+        <section class="employee-view active" id="employeeView">
+          <form class="checklist-panel" id="checklistForm">
+            <div class="form-grid">
+              <label>
+                Kunde
+                <input id="customerName" name="customerName" type="text" placeholder="z. B. Familie Schneider" required />
+              </label>
+              <label>
+                Kunden-E-Mail
+                <input id="customerEmail" name="customerEmail" type="email" placeholder="kunde@example.de" required />
+              </label>
+              <label>
+                Auftrag / Baustelle
+                <input id="jobTitle" name="jobTitle" type="text" placeholder="Wartung Heizung, Badmontage ..." required />
+              </label>
+              <label>
+                Mitarbeiter
+                <input id="employeeName" name="employeeName" type="text" placeholder="Name" required />
+              </label>
+            </div>
+
+            <div class="section-heading">
+              <h2>Prüfpunkte</h2>
+              <button class="icon-button" id="addItemButton" type="button" title="Prüfpunkt hinzufügen" aria-label="Prüfpunkt hinzufügen">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+            </div>
+            <div class="items" id="checklistItems"></div>
+
+            <div class="media-row">
+              <label class="upload-box">
+                <input id="photoInput" type="file" accept="image/*" multiple />
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
+                <span>Bilder hochladen</span>
+              </label>
+              <label class="comment-box">
+                Kommentar
+                <textarea id="employeeComment" rows="5" placeholder="Besonderheiten, Mängel oder Hinweise für den Chef"></textarea>
+              </label>
+            </div>
+
+            <div class="preview-strip" id="photoPreview" aria-live="polite"></div>
+
+            <div class="actions">
+              <button class="secondary-button" id="saveDraftButton" type="button">Entwurf speichern</button>
+              <button class="primary-button" type="submit">Checkliste einreichen</button>
+            </div>
+          </form>
+
+          <section class="list-panel">
+            <div class="section-heading">
+              <h2>Meine Checklisten</h2>
+              <button class="text-button" id="newChecklistButton" type="button">Neu</button>
+            </div>
+            <div class="submission-list" id="employeeList"></div>
+          </section>
+        </section>
+
+        <section class="boss-view" id="bossView">
+          <div class="review-layout">
+            <section class="list-panel">
+              <div class="section-heading">
+                <h2>Eingereichte Checklisten</h2>
+                <select id="statusFilter" aria-label="Status filtern">
+                  <option value="all">Alle</option>
+                  <option value="submitted">Zur Prüfung</option>
+                  <option value="approved">Freigegeben</option>
+                  <option value="draft">Entwürfe</option>
+                </select>
+              </div>
+              <div class="submission-list" id="bossList"></div>
+            </section>
+
+            <section class="review-panel" id="reviewPanel">
+              <div class="empty-state">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                <h2>Checkliste auswählen</h2>
+                <p>Der Bericht, die Bilder und die Freigabe erscheinen hier.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="itemTemplate">
+      <div class="check-item">
+        <div class="check-item-head">
+          <label class="checkbox-line">
+            <input type="checkbox" />
+            <span contenteditable="true"></span>
+          </label>
+          <button class="icon-button remove-item" type="button" title="Prüfpunkt entfernen" aria-label="Prüfpunkt entfernen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <label class="item-comment-label">
+          Kommentar zum Prüfpunkt
+          <textarea class="item-comment-input" rows="2" placeholder="Optionaler Kommentar..."></textarea>
+        </label>
+      </div>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
