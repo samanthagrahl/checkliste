@@ -1,18 +1,17 @@
 const storageKey = "werkstattcheck-submissions-v1";
 const sessionKey = "werkstattcheck-session-v1";
 const users = [
-  { username: "chef", password: "chef123", role: "boss", label: "Chef" },
+  { username: "patrick", password: "patrick123", role: "boss", label: "Patrick" },
   { username: "mitarbeiter", password: "mitarbeiter123", role: "employee", label: "Mitarbeiter" }
 ];
 
 const defaultItems = [
-  "Arbeitsbereich sauber und sicher hinterlassen",
-  "Ausgeführte Arbeiten geprüft",
-  "Material und Teile dokumentiert",
-  "Kunde über Ergebnis informiert",
-  "Mängel oder Folgearbeiten notiert",
-  "Pool",
-  "Bäume geschnitten"
+  "Pflanzen und Hecken geschnitten",
+  "Rasen gemäht",
+  "Haus sauber und zur Anreise bereit",
+  "Pool sauber",
+  "Pool Werte ideal",
+  "Fenster gereinigt"
 ];
 
 let submissions = loadSubmissions();
@@ -20,6 +19,7 @@ let currentRole = null;
 let activeChecklistId = null;
 let uploadedPhotos = [];
 let currentSession = loadSession();
+let currentMailPreviewUrl = null;
 
 const el = {
   authScreen: document.getElementById("authScreen"),
@@ -92,7 +92,7 @@ function loadSubmissions() {
         approvedAt: "",
         emailSentAt: "",
         photos: [],
-        items: defaultItems.map((text, index) => ({ text, checked: index !== 4 }))
+        items: defaultItems.map((text) => ({ text, checked: false }))
       }
     ];
   }
@@ -387,7 +387,7 @@ function buildReportText(entry) {
   const done = entry.items.filter((item) => item.checked).length;
   const open = entry.items.length - done;
   const itemLines = entry.items.map((item) => {
-    const statusMark = item.checked ? "[OK]" : "[OFFEN]";
+    const statusMark = item.checked ? "✓" : "!";
     const commentPart = item.comment ? ` - Kommentar: ${item.comment}` : "";
     return `- ${statusMark} ${item.text}${commentPart}`;
   }).join("\n");
@@ -399,18 +399,83 @@ function buildReportText(entry) {
     "",
     "Prüfpunkte:",
     itemLines,
-    entry.employeeComment ? `Kommentar Mitarbeiter: ${entry.employeeComment}` : "",
+    entry.employeeComment ? `Weitere Informationen: ${entry.employeeComment}` : "",
     entry.bossComment ? `Kommentar Freigabe: ${entry.bossComment}` : "",
     "",
     "Freundliche Grüße",
-    "Ihr Handwerksbetrieb"
+    "Ihre Familie Swiderski - immer in bester Hand"
   ].filter(Boolean).join("\n");
+}
+
+function buildReportHtml(entry) {
+  const done = entry.items.filter((item) => item.checked).length;
+  const open = entry.items.length - done;
+  return `
+    <p>Guten Tag ${escapeHtml(entry.customerName)},</p>
+    <p>anbei erhalten Sie den Bericht zu "${escapeHtml(entry.jobTitle)}".</p>
+    <p>Ergebnis: ${done} von ${entry.items.length} Prüfpunkten erledigt, ${open} offen.</p>
+    <h3>Prüfpunkte</h3>
+    <ul class="report-items">
+      ${entry.items.map((item) => `
+        <li>
+          <span class="result-mark ${item.checked ? "ok" : ""}">${item.checked ? "✓" : "!"}</span>
+          <div>
+            <span>${escapeHtml(item.text)}</span>
+            ${item.comment ? `<small class="item-note">Kommentar: ${escapeHtml(item.comment)}</small>` : ""}
+          </div>
+        </li>
+      `).join("")}
+    </ul>
+    ${entry.employeeComment ? `<p><strong>Weitere Informationen:</strong> ${escapeHtml(entry.employeeComment)}</p>` : ""}
+    ${entry.bossComment ? `<p><strong>Kommentar Freigabe:</strong> ${escapeHtml(entry.bossComment)}</p>` : ""}
+    <p>Freundliche Grüße<br>Ihre Familie Swiderski - immer in bester Hand</p>
+  `;
 }
 
 function openMailDraft(entry) {
   const subject = encodeURIComponent(`Bericht: ${entry.jobTitle}`);
   const body = encodeURIComponent(buildReportText(entry));
-  window.location.href = `mailto:${entry.customerEmail}?subject=${subject}&body=${body}`;
+  return `mailto:${entry.customerEmail}?subject=${subject}&body=${body}`;
+}
+
+function buildMailPreviewUrl(entry) {
+  const mailtoUrl = openMailDraft(entry);
+  const previewHtml = `
+    <!doctype html>
+    <html lang="de">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>E-Mail-Entwurf</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f4f4f4; color: #1a1a1a; }
+          .card { max-width: 900px; margin: 0 auto; background: #fff; border: 1px solid #ddd2b9; border-radius: 10px; padding: 20px; }
+          h1 { margin-top: 0; }
+          pre { white-space: pre-wrap; background: #fafafa; border: 1px solid #e6e6e6; border-radius: 8px; padding: 12px; }
+          .actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+          .button { display: inline-block; text-decoration: none; padding: 10px 14px; border-radius: 8px; border: 1px solid #ddd2b9; color: #1a1a1a; font-weight: 700; }
+          .button.primary { background: #d49b2a; border-color: #d49b2a; color: #fff; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>E-Mail-Entwurf</h1>
+          <p><strong>An:</strong> ${escapeHtml(entry.customerEmail)}</p>
+          <p><strong>Betreff:</strong> Bericht: ${escapeHtml(entry.jobTitle)}</p>
+          <pre>${escapeHtml(buildReportText(entry))}</pre>
+          <div class="actions">
+            <a class="button primary" href="${mailtoUrl}">E-Mail-App öffnen</a>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  if (currentMailPreviewUrl) {
+    URL.revokeObjectURL(currentMailPreviewUrl);
+  }
+  currentMailPreviewUrl = URL.createObjectURL(new Blob([previewHtml], { type: "text/html" }));
+  return currentMailPreviewUrl;
 }
 
 function renderReview() {
@@ -433,9 +498,10 @@ function renderReview() {
     customerEmail: escapeHtml(entry.customerEmail),
     employeeName: escapeHtml(entry.employeeName),
     employeeComment: escapeHtml(entry.employeeComment),
-    bossComment: escapeHtml(entry.bossComment || ""),
-    reportText: escapeHtml(buildReportText(entry)).replaceAll("\n", "<br>")
+    bossComment: escapeHtml(entry.bossComment || "")
   };
+  const reportHtml = buildReportHtml(entry);
+  const mailDraftUrl = buildMailPreviewUrl(entry);
   el.reviewPanel.innerHTML = `
     <div class="review-header">
       <div>
@@ -465,7 +531,7 @@ function renderReview() {
       `).join("")}
     </ul>
 
-    ${entry.employeeComment ? `<div class="report-preview"><h3>Kommentar Mitarbeiter</h3><p>${safe.employeeComment}</p></div>` : ""}
+    ${entry.employeeComment ? `<div class="report-preview"><h3>Weitere Informationen</h3><p>${safe.employeeComment}</p></div>` : ""}
 
     <div class="photo-gallery">
       ${entry.photos.map((photo) => `<img src="${photo.data}" alt="${escapeHtml(photo.name)}">`).join("")}
@@ -478,11 +544,11 @@ function renderReview() {
 
     <div class="report-preview">
       <h3>Kundenbericht</h3>
-      <p>${safe.reportText}</p>
+      ${reportHtml}
     </div>
 
     <div class="review-actions">
-      <button class="secondary-button" id="mailDraftButton" type="button">E-Mail-Entwurf öffnen</button>
+      <a class="secondary-button" id="mailDraftLink" href="${mailDraftUrl}" target="_blank" rel="noopener noreferrer">E-Mail-Entwurf öffnen</a>
       ${entry.status === "approved"
         ? `<button class="secondary-button" id="reopenButton" type="button">Erneut prüfen</button>`
         : `<button class="primary-button" id="approveButton" type="button">Freigeben und Bericht senden</button>`}
@@ -490,7 +556,6 @@ function renderReview() {
     </div>
   `;
 
-  document.getElementById("mailDraftButton").addEventListener("click", () => openMailDraft(entry));
   document.getElementById("deleteButton").addEventListener("click", () => deleteChecklist(entry.id));
   document.getElementById("approveButton")?.addEventListener("click", () => approveChecklist(entry.id));
   document.getElementById("reopenButton")?.addEventListener("click", () => reopenChecklist(entry.id));
