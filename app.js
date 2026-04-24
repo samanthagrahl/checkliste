@@ -42,6 +42,9 @@ const el = {
   photoPreview: document.getElementById("photoPreview"),
   employeeList: document.getElementById("employeeList"),
   bossList: document.getElementById("bossList"),
+  bossSearchRow: document.getElementById("bossSearchRow"),
+  bossCustomerFilter: document.getElementById("bossCustomerFilter"),
+  bossProjectFilter: document.getElementById("bossProjectFilter"),
   reviewPanel: document.getElementById("reviewPanel"),
   statusFilter: document.getElementById("statusFilter"),
   saveDraftButton: document.getElementById("saveDraftButton"),
@@ -158,6 +161,8 @@ function setRole(role) {
   currentRole = role;
   el.employeeView.classList.toggle("active", role === "employee");
   el.bossView.classList.toggle("active", role === "boss");
+  const isPatrick = currentSession?.username === "patrick";
+  el.bossSearchRow.classList.toggle("hidden", !(role === "boss" && isPatrick));
   el.roleEyebrow.textContent = role === "employee" ? "Mitarbeiterbereich" : "Chefbereich";
   el.pageTitle.textContent = role === "employee" ? "Checkliste ausfüllen" : "Checklisten prüfen und freigeben";
   render();
@@ -566,7 +571,17 @@ function renderReview() {
 
 function renderLists() {
   const filter = el.statusFilter.value;
-  const filteredForBoss = filter === "all" ? submissions : submissions.filter((entry) => entry.status === filter);
+  const customerQuery = el.bossCustomerFilter.value.trim().toLowerCase();
+  const projectQuery = el.bossProjectFilter.value.trim().toLowerCase();
+  const isPatrick = currentSession?.username === "patrick";
+  const filteredByStatus = filter === "all" ? submissions : submissions.filter((entry) => entry.status === filter);
+  const filteredForBoss = isPatrick
+    ? filteredByStatus.filter((entry) => {
+      const matchesCustomer = !customerQuery || entry.customerName.toLowerCase().includes(customerQuery);
+      const matchesProject = !projectQuery || entry.jobTitle.toLowerCase().includes(projectQuery);
+      return matchesCustomer && matchesProject;
+    })
+    : filteredByStatus;
   renderSubmissionList(el.employeeList, submissions, "employee");
   renderSubmissionList(el.bossList, filteredForBoss, "boss");
 }
@@ -593,6 +608,8 @@ el.checklistForm.addEventListener("submit", (event) => {
 el.saveDraftButton.addEventListener("click", () => saveChecklist("draft"));
 el.newChecklistButton.addEventListener("click", resetForm);
 el.statusFilter.addEventListener("change", renderLists);
+el.bossCustomerFilter.addEventListener("input", renderLists);
+el.bossProjectFilter.addEventListener("input", renderLists);
 el.loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
   login(el.loginUsername.value.trim(), el.loginPassword.value);

@@ -14,7 +14,7 @@
         <p>Melde dich als Patrick oder Mitarbeiter an.</p>
         <label>
           Benutzername
-          <input id="loginUsername" name="username" type="text" placeholder="z. B. patrick" required />
+          <input id="loginUsername" name="username" type="text" placeholder="patrick oder mitarbeiter" required />
         </label>
         <label>
           Passwort
@@ -138,6 +138,10 @@
                   <option value="approved">Freigegeben</option>
                   <option value="draft">Entwürfe</option>
                 </select>
+              </div>
+              <div class="boss-search-row" id="bossSearchRow">
+                <input id="bossCustomerFilter" type="search" placeholder="Kundenname filtern" aria-label="Nach Kundenname filtern" />
+                <input id="bossProjectFilter" type="search" placeholder="Projekt filtern" aria-label="Nach Projekt filtern" />
               </div>
               <div class="submission-list" id="bossList"></div>
             </section>
