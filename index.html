@@ -11,17 +11,17 @@
       <form class="auth-card" id="loginForm">
         <img class="auth-logo" src="logo-swiderski.png" alt="Swiderski Property Management" />
         <h1>Immobiliencheck Login</h1>
-        <p>Melde dich als Patrick oder Mitarbeiter an.</p>
+        <p>Melde dich als Patrick, Jesus, Xavi oder Eumel an.</p>
         <label>
           Benutzername
-          <input id="loginUsername" name="username" type="text" placeholder="patrick oder mitarbeiter" required />
+          <input id="loginUsername" name="username" type="text" placeholder="patrick, jesus, xavi, eumel" required />
         </label>
         <label>
           Passwort
           <input id="loginPassword" name="password" type="password" placeholder="Passwort" required />
         </label>
         <button class="primary-button" type="submit">Anmelden</button>
-        <small class="auth-hint">Demo-Zugänge: patrick/patrick123 oder mitarbeiter/mitarbeiter123</small>
+        <small class="auth-hint">Zugänge: patrick/patrick123, jesus/123, xavi/123, eumel/123</small>
       </form>
     </section>
 
@@ -40,6 +40,14 @@
           <strong id="sessionUser">-</strong>
           <button class="secondary-button" id="logoutButton" type="button">Abmelden</button>
         </div>
+
+        <nav class="module-tabs" id="moduleTabs" aria-label="Bereiche">
+          <button class="module-tab active" type="button" data-section="checklist">Checkliste</button>
+          <button class="module-tab" type="button" data-section="customerDb" id="customerDbTab">Kundendatenbank</button>
+          <button class="module-tab" type="button" data-section="calendar">Kalender</button>
+          <button class="module-tab" type="button" data-section="worktime" id="worktimeTab">Arbeitszeiten</button>
+          <button class="module-tab" type="button" data-section="checkpoints" id="checkpointTab">Prüfpunkte</button>
+        </nav>
 
         <div class="stats">
           <div>
@@ -69,25 +77,33 @@
           </div>
         </header>
 
-        <section class="employee-view active" id="employeeView">
-          <form class="checklist-panel" id="checklistForm">
+        <section id="checklistSection">
+          <section class="employee-view active" id="employeeView">
+            <form class="checklist-panel" id="checklistForm">
             <div class="form-grid">
               <label>
                 Kunde
                 <input id="customerName" name="customerName" type="text" placeholder="z. B. Familie Schneider" required />
               </label>
-              <label>
-                Kunden-E-Mail
-                <input id="customerEmail" name="customerEmail" type="email" placeholder="kunde@example.de" required />
-              </label>
-              <label>
-                Auftrag / Baustelle
-                <input id="jobTitle" name="jobTitle" type="text" placeholder="Adresse, Hausname, Projekt..." required />
-              </label>
-              <label>
-                Mitarbeiter
-                <input id="employeeName" name="employeeName" type="text" placeholder="Name" required />
-              </label>
+              <div class="time-capture">
+                <span>Kommen</span>
+                <button class="secondary-button" id="comeButton" type="button">Zeit erfassen</button>
+                <small id="comeTimeDisplay">-</small>
+              </div>
+              <div class="time-capture">
+                <span>Pause</span>
+                <div class="pause-buttons">
+                  <button class="secondary-button" id="breakStartButton" type="button">Pause Start</button>
+                  <button class="secondary-button" id="breakEndButton" type="button">Pause Ende</button>
+                </div>
+                <small id="breakStartTimeDisplay">Start: -</small>
+                <small id="breakEndTimeDisplay">Ende: -</small>
+              </div>
+              <div class="time-capture">
+                <span>Gehen</span>
+                <button class="secondary-button" id="leaveButton" type="button">Zeit erfassen</button>
+                <small id="leaveTimeDisplay">-</small>
+              </div>
             </div>
 
             <div class="section-heading">
@@ -116,43 +132,137 @@
               <button class="secondary-button" id="saveDraftButton" type="button">Entwurf speichern</button>
               <button class="primary-button" type="submit">Checkliste einreichen</button>
             </div>
-          </form>
-
-          <section class="list-panel">
-            <div class="section-heading">
-              <h2>Meine Checklisten</h2>
-              <button class="text-button" id="newChecklistButton" type="button">Neu</button>
+            </form>
+            <div class="checklist-panel locked-hint hidden" id="employeeChecklistLockedHint">
+              <h2>Checkliste über Kalender starten</h2>
+              <p>Neue Checklisten können nur über den Kalender-Einsatz gestartet werden.</p>
+              <p>Bereits begonnene Checklisten findest du rechts unter "Meine Checklisten".</p>
             </div>
-            <div class="submission-list" id="employeeList"></div>
+
+            <section class="list-panel">
+              <div class="section-heading">
+                <h2>Meine Checklisten</h2>
+                <button class="text-button" id="newChecklistButton" type="button">Neu</button>
+              </div>
+              <div class="submission-list" id="employeeList"></div>
+            </section>
+          </section>
+
+          <section class="boss-view" id="bossView">
+            <div class="review-layout">
+              <section class="list-panel">
+                <div class="section-heading">
+                  <h2>Eingereichte Checklisten</h2>
+                  <select id="statusFilter" aria-label="Status filtern">
+                    <option value="all">Alle</option>
+                    <option value="submitted">Zur Prüfung</option>
+                    <option value="approved">Freigegeben</option>
+                    <option value="draft">Entwürfe</option>
+                  </select>
+                </div>
+                <div class="boss-search-row" id="bossSearchRow">
+                  <input id="bossCustomerFilter" type="search" placeholder="Kundenname filtern" aria-label="Nach Kundenname filtern" />
+                  <input id="bossProjectFilter" type="search" placeholder="Projekt filtern" aria-label="Nach Projekt filtern" />
+                </div>
+                <div class="submission-list" id="bossList"></div>
+              </section>
+
+              <section class="review-panel" id="reviewPanel">
+                <div class="empty-state">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                  <h2>Checkliste auswählen</h2>
+                  <p>Der Bericht, die Bilder und die Freigabe erscheinen hier.</p>
+                </div>
+              </section>
+            </div>
           </section>
         </section>
 
-        <section class="boss-view" id="bossView">
-          <div class="review-layout">
-            <section class="list-panel">
-              <div class="section-heading">
-                <h2>Eingereichte Checklisten</h2>
-                <select id="statusFilter" aria-label="Status filtern">
-                  <option value="all">Alle</option>
-                  <option value="submitted">Zur Prüfung</option>
-                  <option value="approved">Freigegeben</option>
-                  <option value="draft">Entwürfe</option>
-                </select>
-              </div>
-              <div class="boss-search-row" id="bossSearchRow">
-                <input id="bossCustomerFilter" type="search" placeholder="Kundenname filtern" aria-label="Nach Kundenname filtern" />
-                <input id="bossProjectFilter" type="search" placeholder="Projekt filtern" aria-label="Nach Projekt filtern" />
-              </div>
-              <div class="submission-list" id="bossList"></div>
-            </section>
+        <section class="customer-db-panel hidden" id="customerDbPanel">
+          <div class="section-heading">
+            <h2>Kundendatenbank</h2>
+          </div>
+          <form class="customer-db-form" id="customerDbForm">
+            <input id="dbFirstName" type="text" placeholder="Vorname" required />
+            <input id="dbLastName" type="text" placeholder="Nachname" required />
+            <input id="dbAddress" type="text" placeholder="Adresse" required />
+            <input id="dbProject" type="text" placeholder="Projekt" required />
+            <input id="dbEmail" type="email" placeholder="E-Mailadresse" required />
+            <input id="dbPhone" type="tel" placeholder="Telefonnummer" required />
+            <details class="customer-checkpoints" id="customerCheckpointFieldset">
+              <summary>Wichtige Prüfpunkte</summary>
+              <div id="customerCheckpointOptions"></div>
+            </details>
+            <button class="primary-button" type="submit">Kunde speichern</button>
+          </form>
+          <div class="customer-db-list" id="customerDbList"></div>
+        </section>
 
-            <section class="review-panel" id="reviewPanel">
-              <div class="empty-state">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                <h2>Checkliste auswählen</h2>
-                <p>Der Bericht, die Bilder und die Freigabe erscheinen hier.</p>
+        <section class="calendar-panel" id="calendarPanel">
+          <div class="section-heading">
+            <h2>Mitarbeiterverwaltung (Kalender)</h2>
+            <div class="calendar-nav">
+              <button class="secondary-button" id="calendarPrev" type="button">←</button>
+              <strong id="calendarMonthLabel">-</strong>
+              <button class="secondary-button" id="calendarNext" type="button">→</button>
+            </div>
+          </div>
+
+          <div class="calendar-grid" id="calendarGrid" aria-live="polite"></div>
+
+          <div class="calendar-staff">
+            <div class="calendar-staff-head">
+              <h3 id="calendarSelectedLabel">Einsätze am -</h3>
+              <div class="calendar-staff-tools">
+                <select id="calendarSort" aria-label="Einsätze sortieren">
+                  <option value="time-asc">Sortierung: Uhrzeit aufsteigend</option>
+                  <option value="time-desc">Sortierung: Uhrzeit absteigend</option>
+                  <option value="employee-asc">Sortierung: Mitarbeiter A-Z</option>
+                </select>
+                <button class="primary-button" id="calendarNewAssignmentButton" type="button">Neuer Einsatz</button>
               </div>
-            </section>
+            </div>
+            <form class="calendar-form hidden" id="calendarStaffForm">
+              <select id="calendarEmployeeSelect" required>
+                <option value="">Mitarbeiter wählen</option>
+              </select>
+              <input id="calendarFromTime" type="time" required />
+              <input id="calendarToTime" type="time" required />
+              <select id="calendarCustomerSelect" required>
+                <option value="">Kunde auswählen</option>
+              </select>
+              <input id="calendarStaffComment" type="text" placeholder="Kommentar für Mitarbeiter (optional)" />
+              <button class="primary-button" type="submit">Hinzufügen</button>
+            </form>
+            <div class="staff-list" id="calendarStaffList"></div>
+          </div>
+        </section>
+
+        <section class="worktime-panel hidden" id="worktimePanel">
+          <div class="section-heading">
+            <h2>Arbeitszeiten</h2>
+            <div class="worktime-filter">
+              <select id="worktimeScope" aria-label="Zeitraum">
+                <option value="day">Tag</option>
+                <option value="week">Woche</option>
+                <option value="month">Monat</option>
+              </select>
+              <input id="worktimeDate" type="date" />
+            </div>
+          </div>
+          <div class="worktime-list" id="worktimeList"></div>
+        </section>
+
+        <section class="worktime-panel hidden" id="checkpointPanel">
+          <div class="section-heading">
+            <h2>Prüfpunkte</h2>
+          </div>
+          <div class="checkpoint-manager">
+            <form class="checkpoint-form" id="checkpointForm">
+              <input id="checkpointName" type="text" placeholder="Neuen Prüfpunkt eingeben" required />
+              <button class="primary-button" id="checkpointSaveButton" type="submit">Prüfpunkt speichern</button>
+            </form>
+            <div class="checkpoint-list" id="checkpointList"></div>
           </div>
         </section>
       </main>
@@ -172,6 +282,12 @@
         <label class="item-comment-label">
           Kommentar zum Prüfpunkt
           <textarea class="item-comment-input" rows="2" placeholder="Optionaler Kommentar..."></textarea>
+        </label>
+        <label class="item-photo-label">
+          Bild zum Prüfpunkt
+          <input class="item-photo-input" type="file" accept="image/*" />
+          <span class="item-photo-trigger">Bild auswählen</span>
+          <div class="item-photo-preview"></div>
         </label>
       </div>
     </template>
