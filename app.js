@@ -44,6 +44,7 @@ const el = {
   loginForm: document.getElementById("loginForm"),
   loginUsername: document.getElementById("loginUsername"),
   loginPassword: document.getElementById("loginPassword"),
+  loginError: document.getElementById("loginError"),
   logoutButton: document.getElementById("logoutButton"),
   sessionUser: document.getElementById("sessionUser"),
   employeeView: document.getElementById("employeeView"),
@@ -369,12 +370,22 @@ function renderSectionVisibility() {
 }
 
 function login(username, password) {
-  const user = users.find((item) => item.username === username.toLowerCase() && item.password === password);
+  const normalizedUsername = username.trim().toLowerCase();
+  const normalizedPassword = password.trim();
+  const user = users.find((item) => item.username === normalizedUsername && item.password === normalizedPassword);
   if (!user) {
+    if (el.loginError) {
+      el.loginError.textContent = "Login fehlgeschlagen. Bitte Zugangsdaten prüfen.";
+      el.loginError.classList.remove("hidden");
+    }
     showToast("Login fehlgeschlagen. Bitte Zugangsdaten prüfen.");
     return;
   }
 
+  if (el.loginError) {
+    el.loginError.textContent = "";
+    el.loginError.classList.add("hidden");
+  }
   activeChecklistId = null;
   employeeChecklistUnlocked = false;
   activeAssignmentId = "";
@@ -397,6 +408,10 @@ function logout() {
   el.appShell.classList.add("hidden");
   el.authScreen.classList.remove("hidden");
   el.loginForm.reset();
+  if (el.loginError) {
+    el.loginError.textContent = "";
+    el.loginError.classList.add("hidden");
+  }
   showToast("Du wurdest abgemeldet.");
 }
 

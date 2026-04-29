@@ -99,6 +99,11 @@ svg {
   color: var(--muted);
 }
 
+.auth-error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
