@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="styles.css?v=20260429-5" />
   </head>
   <body>
+    <div class="debug-banner" id="debugBanner" aria-live="polite">Debug: HTML geladen</div>
     <section class="auth-screen" id="authScreen">
       <form class="auth-card" id="loginForm">
         <img class="auth-logo" src="logo-swiderski.png" alt="Swiderski Property Management" />
@@ -293,6 +294,24 @@
       </div>
     </template>
 
-    <script src="app.js?v=20260429-5"></script>
+    <script>
+      (function () {
+        var banner = document.getElementById("debugBanner");
+        function writeDebug(message) {
+          if (!banner) return;
+          banner.textContent = "Debug: " + message;
+          banner.classList.add("visible");
+        }
+        window.cursorDebugLog = writeDebug;
+        window.addEventListener("error", function (event) {
+          writeDebug("JS-Fehler: " + (event && event.message ? event.message : "unbekannt"));
+        });
+        window.addEventListener("unhandledrejection", function () {
+          writeDebug("Promise-Fehler erkannt");
+        });
+        writeDebug("HTML geladen, JS wird gestartet");
+      }());
+    </script>
+    <script src="app.js?v=20260429-6"></script>
   </body>
 </html>

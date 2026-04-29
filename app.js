@@ -46,6 +46,10 @@ function createId() {
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
 }
 
+if (typeof window !== "undefined" && typeof window.cursorDebugLog === "function") {
+  window.cursorDebugLog("app.js geladen");
+}
+
 const el = {
   authScreen: document.getElementById("authScreen"),
   appShell: document.getElementById("appShell"),
@@ -231,15 +235,16 @@ function loadSubmissions() {
 
   try {
     const parsed = JSON.parse(stored);
-    return parsed.map((entry) => ({
-      ...entry,
-      items: (entry.items || []).map((item) => ({
+    return parsed.map((entry) => {
+      const normalizedEntry = Object.assign({}, entry);
+      normalizedEntry.items = (entry.items || []).map((item) => ({
         checked: Boolean(item.checked),
         text: item.text || "Unbenannter Prüfpunkt",
         comment: item.comment || "",
         photo: item.photo || null
-      }))
-    }));
+      }));
+      return normalizedEntry;
+    });
   } catch (error) {
     return [];
   }
@@ -564,10 +569,9 @@ function syncDraftSubmissionsForCustomer(customerId, nextCheckpointNames, rename
     }
 
     updatedCount += 1;
-    return {
-      ...submission,
+    return Object.assign({}, submission, {
       items: buildSyncedChecklistItems(submission.items || [], nextCheckpointNames, renameMap)
-    };
+    });
   });
 
   if (updatedCount) {
@@ -645,8 +649,7 @@ function saveCheckpoint(name) {
   if (activeCheckpointEditIndex >= 0) {
     const previousName = checkpointCatalog[activeCheckpointEditIndex];
     checkpointCatalog[activeCheckpointEditIndex] = normalizedName;
-    customerDb = customerDb.map((entry) => ({
-      ...entry,
+    customerDb = customerDb.map((entry) => Object.assign({}, entry, {
       checkpoints: (entry.checkpoints || []).map((item) => item === previousName ? normalizedName : item)
     }));
     persistCustomerDb();
@@ -671,8 +674,7 @@ function deleteCheckpoint(index) {
   const removedName = checkpointCatalog[index];
   if (!removedName) return;
   checkpointCatalog.splice(index, 1);
-  customerDb = customerDb.map((entry) => ({
-    ...entry,
+  customerDb = customerDb.map((entry) => Object.assign({}, entry, {
     checkpoints: (entry.checkpoints || []).filter((item) => item !== removedName)
   }));
   persistCheckpointCatalog();
@@ -1316,8 +1318,7 @@ function updateCustomerEntry(id, firstName, lastName, address, project, email, p
   const index = customerDb.findIndex((entry) => entry.id === id);
   if (index < 0) return;
   const nextCheckpoints = getSelectedCustomerCheckpoints();
-  customerDb[index] = {
-    ...customerDb[index],
+  customerDb[index] = Object.assign({}, customerDb[index], {
     firstName,
     lastName,
     address,
@@ -1325,7 +1326,7 @@ function updateCustomerEntry(id, firstName, lastName, address, project, email, p
     email,
     phone,
     checkpoints: nextCheckpoints
-  };
+  });
   persistCustomerDb();
   syncDraftSubmissionsForCustomer(id, nextCheckpoints);
   renderCustomerDb();
