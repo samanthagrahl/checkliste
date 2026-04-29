@@ -38,6 +38,14 @@ let activeCheckpointEditIndex = -1;
 let calendarPlanningOpen = false;
 let activeCustomerId = "";
 
+function createId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
+  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
+}
+
 const el = {
   authScreen: document.getElementById("authScreen"),
   appShell: document.getElementById("appShell"),
@@ -203,7 +211,7 @@ function loadSubmissions() {
   if (!stored) {
     return [
       {
-        id: crypto.randomUUID(),
+        id: createId(),
         customerName: "Musterkunde GmbH",
         customerEmail: "kunde@example.de",
         jobTitle: "Wartung der Heizungsanlage",
@@ -692,7 +700,7 @@ function collectForm(status) {
   const inferredCustomerId = activeCustomerId || (existing ? existing.customerId : "") || resolveCustomerIdByName(el.customerName.value.trim());
 
   return {
-    id: activeChecklistId || crypto.randomUUID(),
+    id: activeChecklistId || createId(),
     customerName: el.customerName.value.trim(),
     customerEmail: existing ? existing.customerEmail || "" : "",
     jobTitle: el.customerName.value.trim(),
@@ -1290,7 +1298,7 @@ function renderCustomerDb() {
 
 function addCustomerEntry(firstName, lastName, address, project, email, phone) {
   customerDb.unshift({
-    id: crypto.randomUUID(),
+    id: createId(),
     firstName,
     lastName,
     address,
@@ -1544,7 +1552,7 @@ function addStaffEntry(employeeUsername, fromTime, toTime, customerId, staffComm
   }
 
   list.push({
-    id: crypto.randomUUID(),
+    id: createId(),
     employeeUsername: employee.username,
     name: employee.label,
     fromTime,
