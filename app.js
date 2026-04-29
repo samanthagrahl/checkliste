@@ -12,10 +12,10 @@ const fallbackCheckpointItems = [
   "Fenster gereinigt"
 ];
 const users = [
-  { username: "patrick", password: "patrick123", role: "boss", label: "Patrick" },
-  { username: "jesus", password: "123", role: "employee", label: "Jesus" },
-  { username: "xavi", password: "123", role: "employee", label: "Xavi" },
-  { username: "eumel", password: "123", role: "employee", label: "Eumel" }
+  { username: "chef", password: "123", role: "boss", label: "Chef" },
+  { username: "patrick", password: "123", role: "employee", label: "Patrick" },
+  { username: "souhail", password: "123", role: "employee", label: "Souhail" },
+  { username: "mohammed", password: "123", role: "employee", label: "Mohammed" }
 ];
 
 let submissions = loadSubmissions();
@@ -333,8 +333,8 @@ function getEmployeeUsers() {
 }
 
 function getAvailableSections() {
-  const isPatrick = currentSession?.username === "patrick";
-  return isPatrick ? ["checklist", "customerDb", "calendar", "worktime", "checkpoints"] : ["checklist", "calendar"];
+  const isChef = currentSession?.username === "chef";
+  return isChef ? ["checklist", "customerDb", "calendar", "worktime", "checkpoints"] : ["checklist", "calendar"];
 }
 
 function setActiveSection(section) {
@@ -344,24 +344,24 @@ function setActiveSection(section) {
 }
 
 function renderSectionVisibility() {
-  const isPatrick = currentSession?.username === "patrick";
-  el.customerDbTab.classList.toggle("hidden", !isPatrick);
-  el.worktimeTab.classList.toggle("hidden", !isPatrick);
-  el.checkpointTab.classList.toggle("hidden", !isPatrick);
+  const isChef = currentSession?.username === "chef";
+  el.customerDbTab.classList.toggle("hidden", !isChef);
+  el.worktimeTab.classList.toggle("hidden", !isChef);
+  el.checkpointTab.classList.toggle("hidden", !isChef);
   el.moduleTabButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.section === activeSection);
   });
 
   el.checklistSection.classList.toggle("hidden", activeSection !== "checklist");
-  el.customerDbPanel.classList.toggle("hidden", activeSection !== "customerDb" || !isPatrick);
+  el.customerDbPanel.classList.toggle("hidden", activeSection !== "customerDb" || !isChef);
   el.calendarPanel.classList.toggle("hidden", activeSection !== "calendar");
-  el.worktimePanel.classList.toggle("hidden", activeSection !== "worktime" || !isPatrick);
-  el.checkpointPanel.classList.toggle("hidden", activeSection !== "checkpoints" || !isPatrick);
+  el.worktimePanel.classList.toggle("hidden", activeSection !== "worktime" || !isChef);
+  el.checkpointPanel.classList.toggle("hidden", activeSection !== "checkpoints" || !isChef);
 
   const showChecklist = activeSection === "checklist";
   el.employeeView.classList.toggle("active", showChecklist && currentRole === "employee");
   el.bossView.classList.toggle("active", showChecklist && currentRole === "boss");
-  el.bossSearchRow.classList.toggle("hidden", !(showChecklist && currentRole === "boss" && isPatrick));
+  el.bossSearchRow.classList.toggle("hidden", !(showChecklist && currentRole === "boss" && isChef));
 
   const employeeNeedsCalendarStart = currentRole === "employee" && !employeeChecklistUnlocked && !activeChecklistId && !activeAssignmentId;
   el.checklistForm.classList.toggle("hidden", employeeNeedsCalendarStart);
@@ -1061,9 +1061,9 @@ function renderLists() {
   const filter = el.statusFilter.value;
   const customerQuery = el.bossCustomerFilter.value.trim().toLowerCase();
   const projectQuery = el.bossProjectFilter.value.trim().toLowerCase();
-  const isPatrick = currentSession?.username === "patrick";
+  const isChef = currentSession?.username === "chef";
   const filteredByStatus = filter === "all" ? submissions : submissions.filter((entry) => entry.status === filter);
-  const filteredForBoss = isPatrick
+  const filteredForBoss = isChef
     ? filteredByStatus.filter((entry) => {
       const matchesCustomer = !customerQuery || entry.customerName.toLowerCase().includes(customerQuery);
       const matchesProject = !projectQuery || entry.jobTitle.toLowerCase().includes(projectQuery);
@@ -1159,7 +1159,7 @@ function formatMinutes(totalMinutes) {
 }
 
 function renderWorktimeSummary() {
-  if (!el.worktimeList || currentSession?.username !== "patrick") return;
+  if (!el.worktimeList || currentSession?.username !== "chef") return;
 
   if (!el.worktimeDate.value) {
     el.worktimeDate.value = toIsoDate(new Date());

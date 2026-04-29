@@ -1239,27 +1239,27 @@ select:focus {
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-.staff-jesus {
+.staff-patrick {
   border-left-color: #c9b17b;
 }
 
-.staff-jesus .staff-color-dot {
+.staff-patrick .staff-color-dot {
   background: #c9b17b;
 }
 
-.staff-xavi {
+.staff-souhail {
   border-left-color: #c8b6ff;
 }
 
-.staff-xavi .staff-color-dot {
+.staff-souhail .staff-color-dot {
   background: #c8b6ff;
 }
 
-.staff-eumel {
+.staff-mohammed {
   border-left-color: #b8f5bc;
 }
 
-.staff-eumel .staff-color-dot {
+.staff-mohammed .staff-color-dot {
   background: #b8f5bc;
 }
 
