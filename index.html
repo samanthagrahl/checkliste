@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Immobiliencheck</title>
+    <link rel="icon" href="data:," />
     <script>
       (function () {
-        var targetVersion = "20260429-8";
+        var targetVersion = "20260513-45";
         var currentUrl = new URL(window.location.href);
         if (currentUrl.searchParams.get("pagev") !== targetVersion) {
           currentUrl.searchParams.set("pagev", targetVersion);
@@ -14,26 +15,33 @@
         }
       }());
     </script>
-    <link rel="stylesheet" href="styles.css?v=20260429-8" />
+    <link rel="stylesheet" href="styles.css?v=20260513-calhauszones" />
   </head>
   <body>
-    <div class="debug-banner" id="debugBanner" aria-live="polite">Debug: HTML geladen</div>
     <section class="auth-screen" id="authScreen">
       <form class="auth-card" id="loginForm">
         <img class="auth-logo" src="logo-swiderski.png" alt="Swiderski Property Management" />
-        <h1>Immobiliencheck Login</h1>
-        <p>Melde dich als Chef, Patrick, Souhail oder Mohammed an.</p>
-        <label>
-          Benutzername
-          <input id="loginUsername" name="username" type="text" placeholder="chef, patrick, souhail, mohammed" required />
+        <h1 data-i18n="auth.title">Immobiliencheck Login</h1>
+        <p data-i18n="auth.intro">Melde dich als Chef, Kristina, Patrick, Souhail, Mohammed oder Reinigungspaar an.</p>
+        <label class="auth-lang">
+          <span data-i18n="lang.label">Sprache</span>
+          <select id="localeSelectAuth" aria-label="Sprache" data-i18n-aria="lang.authAria"></select>
         </label>
         <label>
-          Passwort
-          <input id="loginPassword" name="password" type="password" placeholder="Passwort" required />
+          <span data-i18n="auth.username">Benutzername</span>
+          <input id="loginUsername" name="username" type="text" required data-i18n-placeholder="auth.placeholderUser" placeholder="chef, kristina, patrick, souhail, mohammed, reinigungspaar" />
+        </label>
+        <label>
+          <span data-i18n="auth.password">Passwort</span>
+          <input id="loginPassword" name="password" type="password" required data-i18n-placeholder="auth.placeholderPass" placeholder="Passwort" />
+        </label>
+        <label class="auth-remember">
+          <input id="loginRemember" name="remember" type="checkbox" />
+          <span data-i18n="auth.remember">Angemeldet bleiben</span>
         </label>
         <small class="auth-error hidden" id="loginError" aria-live="polite"></small>
-        <button class="primary-button" type="submit">Anmelden</button>
-        <small class="auth-hint">Zugänge: chef/123, patrick/123, souhail/123, mohammed/123</small>
+        <button class="primary-button" type="submit" data-i18n="auth.submit">Anmelden</button>
+        <small class="auth-hint" data-i18n="auth.hint">Zugänge: chef/123, kristina/123, patrick/123, souhail/123, mohammed/123, reinigungspaar/123</small>
       </form>
     </section>
 
@@ -42,37 +50,42 @@
         <div class="brand">
           <img class="brand-logo" src="logo-swiderski.png" alt="Swiderski Property Management" />
           <div>
-            <p>Immobiliencheck</p>
-            <span>Prüfbericht von Immobilien</span>
+            <p data-i18n="sidebar.brandLine1">Immobiliencheck</p>
+            <span data-i18n="sidebar.brandLine2">Prüfbericht von Immobilien</span>
           </div>
         </div>
 
         <div class="session-card">
-          <p>Angemeldet als</p>
+          <p data-i18n="sidebar.loggedInAs">Angemeldet als</p>
           <strong id="sessionUser">-</strong>
-          <button class="secondary-button" id="logoutButton" type="button">Abmelden</button>
+          <label class="session-lang-field">
+            <span data-i18n="lang.label">Sprache</span>
+            <select id="localeSelectSidebar" aria-label="Sprache" data-i18n-aria="lang.sidebarAria"></select>
+          </label>
+          <button class="secondary-button" id="logoutButton" type="button" data-i18n="sidebar.logout">Abmelden</button>
         </div>
 
-        <nav class="module-tabs" id="moduleTabs" aria-label="Bereiche">
-          <button class="module-tab active" type="button" data-section="checklist">Checkliste</button>
-          <button class="module-tab" type="button" data-section="customerDb" id="customerDbTab">Kundendatenbank</button>
-          <button class="module-tab" type="button" data-section="calendar">Kalender</button>
-          <button class="module-tab" type="button" data-section="worktime" id="worktimeTab">Arbeitszeiten</button>
-          <button class="module-tab" type="button" data-section="checkpoints" id="checkpointTab">Prüfpunkte</button>
+        <nav class="module-tabs" id="moduleTabs" data-i18n-aria="nav.aria">
+          <button class="module-tab active" type="button" data-section="checklist" data-i18n="nav.checklist">Checkliste</button>
+          <button class="module-tab" type="button" data-section="workOrder" data-i18n="nav.workOrder">Arbeitsauftrag</button>
+          <button class="module-tab" type="button" data-section="customerDb" id="customerDbTab" data-i18n="nav.customerDb">Kundendatenbank</button>
+          <button class="module-tab" type="button" data-section="calendar" data-i18n="nav.calendar">Kalender</button>
+          <button class="module-tab" type="button" data-section="worktime" id="worktimeTab" data-i18n="nav.worktime">Arbeitszeiten</button>
+          <button class="module-tab" type="button" data-section="checkpoints" id="checkpointTab" data-i18n="nav.checkpoints">Prüfpunkte</button>
         </nav>
 
         <div class="stats">
           <div>
             <span id="statDrafts">0</span>
-            <p>Entwürfe</p>
+            <p data-i18n="stats.drafts">Entwürfe</p>
           </div>
           <div>
             <span id="statSubmitted">0</span>
-            <p>Zur Prüfung</p>
+            <p data-i18n="stats.submitted">Zur Prüfung</p>
           </div>
           <div>
             <span id="statApproved">0</span>
-            <p>Freigegeben</p>
+            <p data-i18n="stats.approved">Freigegeben</p>
           </div>
         </div>
       </aside>
@@ -85,96 +98,182 @@
           </div>
           <div class="status-pill" id="emailStatus">
             <span class="dot"></span>
-            E-Mail-Automatik bereit
+            <span data-i18n="topbar.emailReady">E-Mail-Automatik bereit</span>
           </div>
         </header>
 
         <section id="checklistSection">
           <section class="employee-view active" id="employeeView">
-            <form class="checklist-panel" id="checklistForm">
-            <div class="form-grid">
-              <label>
-                Kunde
-                <input id="customerName" name="customerName" type="text" placeholder="z. B. Familie Schneider" required />
+            <div class="review-layout employee-checklist-layout">
+              <section class="list-panel employee-checklist-list-panel">
+                <div class="boss-filter-panel employee-checklist-toolbar" id="employeeChecklistToolbar">
+                  <div class="section-heading boss-list-heading boss-toolbar-head">
+                    <h2 data-i18n="chk.myLists">Meine Checklisten</h2>
+                    <select id="employeeChecklistStatusFilter" class="boss-status-select" data-i18n-aria="boss.statusAria">
+                      <option value="all" data-i18n="boss.opt.statusAll">Alle Status</option>
+                      <option value="submitted" data-i18n="boss.opt.submitted">Zur Prüfung</option>
+                      <option value="approved" data-i18n="boss.opt.approved">Freigegeben</option>
+                      <option value="draft" data-i18n="boss.opt.draft">Entwürfe</option>
+                    </select>
+                  </div>
+                  <div class="boss-toolbar-filters">
+                    <p class="boss-filter-panel-label" data-i18n="boss.filterList">Liste eingrenzen</p>
+                    <div class="boss-search-row employee-checklist-search-row" id="employeeChecklistSearchRow">
+                      <label class="boss-filter-field">
+                        <span class="boss-filter-caption" data-i18n="boss.customerCap">Kunde</span>
+                        <input
+                          id="employeeChecklistCustomerFilter"
+                          class="boss-filter-control"
+                          type="search"
+                          autocomplete="off"
+                          data-i18n-placeholder="boss.customerPh"
+                          data-i18n-aria="boss.customerAria"
+                        />
+                      </label>
+                      <label class="boss-filter-field">
+                        <span class="boss-filter-caption" data-i18n="boss.projectCap">Projekt</span>
+                        <input
+                          id="employeeChecklistProjectFilter"
+                          class="boss-filter-control"
+                          type="search"
+                          autocomplete="off"
+                          data-i18n-placeholder="boss.projectPh"
+                          data-i18n-aria="boss.projectAria"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="section-heading">
+                  <button class="text-button" id="newChecklistButton" type="button" data-i18n="chk.new">Neu</button>
+                </div>
+                <div class="submission-list" id="employeeList"></div>
+              </section>
+              <section class="review-panel employee-checklist-review-panel">
+            <form class="checklist-panel" id="checklistForm" novalidate>
+            <label class="checklist-template-row hidden" id="checklistTemplateRow">
+              <span data-i18n="chk.tplType">Art der Checkliste</span>
+              <select id="checklistTemplateSelect" data-i18n-aria="chk.tplAria"></select>
+            </label>
+            <div class="form-grid form-grid-employee-stamp">
+              <label class="form-grid-span-kunde">
+                <span data-i18n="chk.customer">Kunde</span>
+                <input id="customerName" name="customerName" type="text" required data-i18n-placeholder="chk.customerPh" placeholder="z. B. Familie Schneider" />
               </label>
+              <div class="checklist-customer-orientation hidden" id="customerOrientationWrap">
+                <span class="checklist-customer-orientation-label" data-i18n="chk.customerPhotoHint">Orientierungsbild (intern)</span>
+                <div class="checklist-customer-orientation-preview" id="customerOrientationPreview" aria-live="polite"></div>
+              </div>
+              <input type="hidden" id="customerEmail" name="customerEmail" value="" autocomplete="off" />
               <div class="time-capture">
-                <span>Kommen</span>
-                <button class="secondary-button" id="comeButton" type="button">Zeit erfassen</button>
+                <span data-i18n="chk.come">Kommen</span>
+                <button class="secondary-button" id="comeButton" type="button" data-i18n="chk.capture">Zeit erfassen</button>
                 <small id="comeTimeDisplay">-</small>
               </div>
               <div class="time-capture">
-                <span>Pause</span>
-                <div class="pause-buttons">
-                  <button class="secondary-button" id="breakStartButton" type="button">Pause Start</button>
-                  <button class="secondary-button" id="breakEndButton" type="button">Pause Ende</button>
-                </div>
-                <small id="breakStartTimeDisplay">Start: -</small>
-                <small id="breakEndTimeDisplay">Ende: -</small>
-              </div>
-              <div class="time-capture">
-                <span>Gehen</span>
-                <button class="secondary-button" id="leaveButton" type="button">Zeit erfassen</button>
+                <span data-i18n="chk.leave">Gehen</span>
+                <button class="secondary-button" id="leaveButton" type="button" data-i18n="chk.capture">Zeit erfassen</button>
                 <small id="leaveTimeDisplay">-</small>
               </div>
             </div>
 
             <div class="section-heading">
-              <h2>Prüfpunkte</h2>
-              <button class="icon-button" id="addItemButton" type="button" title="Prüfpunkt hinzufügen" aria-label="Prüfpunkt hinzufügen">
+              <h2 data-i18n="chk.pointsHead">Prüfpunkte</h2>
+              <button class="icon-button" id="addItemButton" type="button" data-i18n-title="chk.addPointTitle" title="Prüfpunkt hinzufügen" data-i18n-aria="chk.addPointAria">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
               </button>
             </div>
             <div class="items" id="checklistItems"></div>
 
+            <section class="extra-costs-box" id="extraCostsBox">
+              <label class="checkbox-line extra-costs-toggle">
+                <input id="extraCostsEnabled" type="checkbox" />
+                <span contenteditable="false" data-i18n="chk.extraCosts">Zusatzkosten</span>
+              </label>
+              <div class="extra-costs-fields hidden" id="extraCostsFields">
+                <label class="extra-costs-euro-label">
+                  <span data-i18n="chk.extraEuro">Eurobetrag</span>
+                  <input id="extraCostsEuro" type="text" inputmode="decimal" autocomplete="off" data-i18n-placeholder="chk.extraEuroPh" placeholder="z. B. 12,50" />
+                </label>
+                <label class="item-comment-label">
+                  <span data-i18n="chk.extraComment">Kommentar Zusatzkosten</span>
+                  <textarea id="extraCostsComment" class="extra-costs-comment" rows="1" data-i18n-placeholder="chk.extraCommentPh"></textarea>
+                </label>
+                <div class="item-photo-label extra-costs-photo-upload">
+                  <span class="extra-costs-photo-heading" data-i18n="chk.extraPhotoHead">Bild Zusatzkosten</span>
+                  <input id="extraCostsPhotoInput" class="item-photo-input" type="file" accept="image/*" />
+                  <button class="item-photo-trigger" id="extraCostsPhotoTrigger" type="button" data-i18n="chk.pickPhotoExtra">Bild auswählen</button>
+                  <div class="item-photo-preview extra-costs-photo-preview-shell" id="extraCostsPhotoPreview"></div>
+                </div>
+              </div>
+            </section>
+
             <div class="media-row">
               <label class="upload-box">
                 <input id="photoInput" type="file" accept="image/*" multiple />
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
-                <span>Bilder hochladen</span>
+                <span data-i18n="chk.uploadPhotos">Bilder hochladen</span>
               </label>
               <label class="comment-box">
-                Kommentar
-                <textarea id="employeeComment" rows="5" placeholder="Besonderheiten, Mängel oder Hinweise für den Chef"></textarea>
+                <span data-i18n="chk.comment">Kommentar</span>
+                <textarea id="employeeComment" rows="5" data-i18n-placeholder="chk.commentPh"></textarea>
               </label>
             </div>
 
             <div class="preview-strip" id="photoPreview" aria-live="polite"></div>
 
             <div class="actions">
-              <button class="secondary-button" id="saveDraftButton" type="button">Entwurf speichern</button>
-              <button class="primary-button" type="submit">Checkliste einreichen</button>
+              <button class="secondary-button" id="saveDraftButton" type="button" data-i18n="chk.saveDraft">Entwurf speichern</button>
+              <button class="primary-button" type="submit" data-i18n="chk.submit">Checkliste einreichen</button>
             </div>
             </form>
             <div class="checklist-panel locked-hint hidden" id="employeeChecklistLockedHint">
-              <h2>Checkliste über Kalender starten</h2>
-              <p>Neue Checklisten können nur über den Kalender-Einsatz gestartet werden.</p>
-              <p>Bereits begonnene Checklisten findest du rechts unter "Meine Checklisten".</p>
+              <h2 data-i18n="chk.lockedTitle">Checkliste über Kalender starten</h2>
+              <p data-i18n="chk.lockedP1">Neue Checklisten können nur über den Kalender-Einsatz gestartet werden.</p>
+              <p data-i18n="chk.lockedP2">Bereits begonnene Checklisten findest du links in „Meine Checklisten“.</p>
             </div>
-
-            <section class="list-panel">
-              <div class="section-heading">
-                <h2>Meine Checklisten</h2>
-                <button class="text-button" id="newChecklistButton" type="button">Neu</button>
-              </div>
-              <div class="submission-list" id="employeeList"></div>
-            </section>
+              </section>
+            </div>
           </section>
 
           <section class="boss-view" id="bossView">
             <div class="review-layout">
               <section class="list-panel">
-                <div class="section-heading">
-                  <h2>Eingereichte Checklisten</h2>
-                  <select id="statusFilter" aria-label="Status filtern">
-                    <option value="all">Alle</option>
-                    <option value="submitted">Zur Prüfung</option>
-                    <option value="approved">Freigegeben</option>
-                    <option value="draft">Entwürfe</option>
-                  </select>
-                </div>
-                <div class="boss-search-row" id="bossSearchRow">
-                  <input id="bossCustomerFilter" type="search" placeholder="Kundenname filtern" aria-label="Nach Kundenname filtern" />
-                  <input id="bossProjectFilter" type="search" placeholder="Projekt filtern" aria-label="Nach Projekt filtern" />
+                <div class="boss-filter-panel" id="bossFilterPanel">
+                  <div class="section-heading boss-list-heading boss-toolbar-head">
+                    <h2 data-i18n="boss.submittedHeading">Eingereichte Checklisten</h2>
+                    <select id="statusFilter" class="boss-status-select" data-i18n-aria="boss.statusAria">
+                      <option value="all" data-i18n="boss.opt.statusAll">Alle Status</option>
+                      <option value="submitted" data-i18n="boss.opt.submitted">Zur Prüfung</option>
+                      <option value="approved" data-i18n="boss.opt.approved">Freigegeben</option>
+                      <option value="draft" data-i18n="boss.opt.draft">Entwürfe</option>
+                    </select>
+                  </div>
+                  <div class="boss-toolbar-filters">
+                    <p class="boss-filter-panel-label" data-i18n="boss.filterList">Liste eingrenzen</p>
+                    <div class="boss-search-row" id="bossSearchRow">
+                      <label class="boss-filter-field">
+                        <span class="boss-filter-caption" data-i18n="boss.customerCap">Kunde</span>
+                        <input id="bossCustomerFilter" class="boss-filter-control" type="search" autocomplete="off" data-i18n-placeholder="boss.customerPh" data-i18n-aria="boss.customerAria" />
+                      </label>
+                      <label class="boss-filter-field">
+                        <span class="boss-filter-caption" data-i18n="boss.projectCap">Projekt</span>
+                        <input id="bossProjectFilter" class="boss-filter-control" type="search" autocomplete="off" data-i18n-placeholder="boss.projectPh" data-i18n-aria="boss.projectAria" />
+                      </label>
+                      <label class="boss-filter-field">
+                        <span class="boss-filter-caption" data-i18n="boss.checklistCap">Checkliste</span>
+                        <select id="bossChecklistFilter" class="boss-filter-control" data-i18n-aria="boss.checklistAria"></select>
+                      </label>
+                      <label class="boss-filter-field">
+                        <span class="boss-filter-caption" data-i18n="boss.extraCostsCap">Zusatzkosten</span>
+                        <select id="bossExtraCostsFilter" class="boss-filter-control" data-i18n-aria="boss.extraCostsAria">
+                          <option value="all" data-i18n="boss.opt.extraAll">Alle</option>
+                          <option value="yes" data-i18n="boss.opt.extraYes">Ja</option>
+                          <option value="no" data-i18n="boss.opt.extraNo">Nein</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
                 </div>
                 <div class="submission-list" id="bossList"></div>
               </section>
@@ -182,37 +281,101 @@
               <section class="review-panel" id="reviewPanel">
                 <div class="empty-state">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                  <h2>Checkliste auswählen</h2>
-                  <p>Der Bericht, die Bilder und die Freigabe erscheinen hier.</p>
+                  <h2 data-i18n="review.emptyTitle">Checkliste auswählen</h2>
+                  <p data-i18n="review.emptySub">Der Bericht, die Bilder und die Freigabe erscheinen hier.</p>
                 </div>
               </section>
             </div>
           </section>
         </section>
 
+        <section class="work-orders-panel hidden" id="workOrdersPanel" aria-labelledby="workOrdersHeading">
+          <div class="review-layout work-orders-review-layout">
+            <section class="list-panel">
+              <div class="boss-filter-panel work-orders-toolbar hidden" id="workOrdersToolbar">
+                <div class="section-heading boss-list-heading boss-toolbar-head">
+                  <h2 id="workOrdersHeading" data-i18n="wo.title">Arbeitsaufträge</h2>
+                  <select id="workOrdersStatusFilter" class="boss-status-select" data-i18n-aria="wo.statusFilterAria"></select>
+                </div>
+                <div class="boss-toolbar-filters">
+                  <p class="boss-filter-panel-label" data-i18n="wo.filterList">Liste eingrenzen</p>
+                  <div class="boss-search-row work-orders-search-row" id="workOrdersSearchRow">
+                    <label class="boss-filter-field work-orders-filter-field">
+                      <span class="boss-filter-caption" data-i18n="boss.customerCap">Kunde</span>
+                      <input
+                        id="workOrdersCustomerFilter"
+                        class="boss-filter-control"
+                        type="search"
+                        autocomplete="off"
+                        data-i18n-placeholder="boss.customerPh"
+                        data-i18n-aria="boss.customerAria"
+                      />
+                    </label>
+                    <label class="boss-filter-field">
+                      <span class="boss-filter-caption" data-i18n="boss.projectCap">Projekt</span>
+                      <input
+                        id="workOrdersProjectFilter"
+                        class="boss-filter-control"
+                        type="search"
+                        autocomplete="off"
+                        data-i18n-placeholder="boss.projectPh"
+                        data-i18n-aria="boss.projectAria"
+                      />
+                    </label>
+                    <label class="boss-filter-field work-order-emp-filter-wrap hidden" id="workOrdersEmpFilterWrap">
+                      <span class="boss-filter-caption" data-i18n="wo.filterEmpLbl">Mitarbeiter</span>
+                      <select id="workOrdersEmployeeFilter" class="boss-filter-control" data-i18n-aria="wo.filterEmpAria"></select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="submission-list work-orders-list" id="workOrdersList"></div>
+            </section>
+            <section class="review-panel work-orders-detail-panel" id="workOrdersDetailPanel">
+              <div class="empty-state work-orders-detail-empty" id="workOrdersDetailEmpty">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                <h2 data-i18n="wo.detailEmptyTitle">Arbeitsauftrag auswählen</h2>
+                <p data-i18n="wo.detailEmptySub">Alle Details zum Auftrag erscheinen hier.</p>
+              </div>
+              <div id="workOrdersDetailBody" class="work-orders-detail-body hidden"></div>
+            </section>
+          </div>
+        </section>
+
         <section class="customer-db-panel hidden" id="customerDbPanel">
           <div class="section-heading">
-            <h2>Kundendatenbank</h2>
+            <h2 data-i18n="cust.heading">Kundendatenbank</h2>
           </div>
           <form class="customer-db-form" id="customerDbForm">
-            <input id="dbFirstName" type="text" placeholder="Vorname" required />
-            <input id="dbLastName" type="text" placeholder="Nachname" required />
-            <input id="dbAddress" type="text" placeholder="Adresse" required />
-            <input id="dbProject" type="text" placeholder="Projekt" required />
-            <input id="dbEmail" type="email" placeholder="E-Mailadresse" required />
-            <input id="dbPhone" type="tel" placeholder="Telefonnummer" required />
+            <input id="dbFirstName" type="text" required data-i18n-placeholder="cust.phFirst" placeholder="Vorname" />
+            <input id="dbLastName" type="text" required data-i18n-placeholder="cust.phLast" placeholder="Nachname" />
+            <input id="dbAddress" type="text" required data-i18n-placeholder="cust.phAddr" placeholder="Adresse" />
+            <input id="dbCoordinates" type="text" data-i18n-placeholder="cust.phCoords" placeholder="Koordinaten (lat, lng) optional" />
+            <input id="dbProject" type="text" required data-i18n-placeholder="cust.phProject" placeholder="Projekt" />
+            <input id="dbEmail" type="email" required data-i18n-placeholder="cust.phEmail" placeholder="E-Mailadresse" />
+            <input id="dbPhone" type="tel" required data-i18n-placeholder="cust.phPhone" placeholder="Telefonnummer" />
+            <label class="customer-orientation-upload">
+              <span data-i18n="cust.photoLbl">Orientierungsbild (intern, 1 Bild)</span>
+              <input id="dbOrientationPhoto" type="file" accept="image/*" />
+            </label>
+            <div class="customer-orientation-preview" id="dbOrientationPreview" aria-live="polite"></div>
+            <button class="text-button hidden" type="button" id="dbOrientationRemove" data-i18n="cust.photoRemove">Bild entfernen</button>
             <details class="customer-checkpoints" id="customerCheckpointFieldset">
-              <summary>Wichtige Prüfpunkte</summary>
-              <div id="customerCheckpointOptions"></div>
+              <summary data-i18n="cust.detailsCp">Prüfpunkte je Checkliste</summary>
+              <label class="customer-checkpoint-template-label">
+                <span data-i18n="cust.cpTplLabel">Checkliste</span>
+                <select id="customerCheckpointTemplateSelect" data-i18n-aria="cust.cpTplAria"></select>
+              </label>
+              <div id="customerCheckpointOptions" class="customer-checkpoint-options"></div>
             </details>
-            <button class="primary-button" type="submit">Kunde speichern</button>
+            <button class="primary-button" type="submit" data-i18n="cust.save">Kunde speichern</button>
           </form>
           <div class="customer-db-list" id="customerDbList"></div>
         </section>
 
         <section class="calendar-panel hidden" id="calendarPanel">
           <div class="section-heading">
-            <h2>Mitarbeiterverwaltung (Kalender)</h2>
+            <h2 data-i18n="cal.heading">Mitarbeiterverwaltung (Kalender)</h2>
             <div class="calendar-nav">
               <button class="secondary-button" id="calendarPrev" type="button">←</button>
               <strong id="calendarMonthLabel">-</strong>
@@ -226,58 +389,285 @@
             <div class="calendar-staff-head">
               <h3 id="calendarSelectedLabel">Einsätze am -</h3>
               <div class="calendar-staff-tools">
-                <select id="calendarSort" aria-label="Einsätze sortieren">
-                  <option value="time-asc">Sortierung: Uhrzeit aufsteigend</option>
-                  <option value="time-desc">Sortierung: Uhrzeit absteigend</option>
-                  <option value="employee-asc">Sortierung: Mitarbeiter A-Z</option>
+                <select id="calendarSort" data-i18n-aria="cal.sortAria">
+                  <option value="time-asc" data-i18n="cal.opt.timeAsc">Sortierung: Uhrzeit aufsteigend</option>
+                  <option value="time-desc" data-i18n="cal.opt.timeDesc">Sortierung: Uhrzeit absteigend</option>
+                  <option value="employee-asc" data-i18n="cal.opt.empAsc">Sortierung: Mitarbeiter A-Z</option>
                 </select>
-                <button class="primary-button" id="calendarNewAssignmentButton" type="button">Neuer Einsatz</button>
+                <select id="calendarEmployeeFilter" data-i18n-aria="cal.filterEmpAria">
+                  <option value="" data-i18n="cal.allStaff">Mitarbeiter: Alle</option>
+                </select>
+                <button class="primary-button" id="calendarNewAssignmentButton" type="button" data-i18n="cal.newAssignment">Neuer Einsatz</button>
               </div>
             </div>
-            <form class="calendar-form hidden" id="calendarStaffForm">
-              <select id="calendarEmployeeSelect" required>
-                <option value="">Mitarbeiter wählen</option>
-              </select>
-              <input id="calendarFromTime" type="time" required />
-              <input id="calendarToTime" type="time" required />
-              <select id="calendarCustomerSelect" required>
-                <option value="">Kunde auswählen</option>
-              </select>
-              <input id="calendarStaffComment" type="text" placeholder="Kommentar für Mitarbeiter (optional)" />
-              <button class="primary-button" type="submit">Hinzufügen</button>
+            <form class="calendar-form calendar-form-shell hidden" id="calendarStaffForm">
+              <div class="calendar-form-section calendar-form-assign-row">
+                <label class="calendar-field calendar-field-assign-type">
+                  <span class="calendar-field-label" data-i18n="cal.assignKindLbl">Einsatzart</span>
+                  <select id="calendarAssignmentType" class="calendar-control" required>
+                    <option value="single" data-i18n="cal.optSingle">Einmaliger Einsatz</option>
+                    <option value="weekly" data-i18n="cal.optWeekly">Wöchentliche Regel</option>
+                    <option value="biweekly" data-i18n="cal.optBiweekly">14-tägige Regel</option>
+                    <option value="monthly" data-i18n="cal.optMonthly">Monatliche Regel</option>
+                  </select>
+                </label>
+                <label class="calendar-field calendar-field-recurrence-weekday hidden" id="calendarRecurringWeekdayWrap">
+                  <span class="calendar-field-label" data-i18n="cal.weekRuleDayLbl">Wochentag</span>
+                  <select id="calendarRecurringWeekday" class="calendar-control" data-i18n-aria="cal.weekdayAria">
+                    <option value="1" data-i18n="weekday.1">Montag</option>
+                    <option value="2" data-i18n="weekday.2">Dienstag</option>
+                    <option value="3" data-i18n="weekday.3">Mittwoch</option>
+                    <option value="4" data-i18n="weekday.4">Donnerstag</option>
+                    <option value="5" data-i18n="weekday.5">Freitag</option>
+                    <option value="6" data-i18n="weekday.6">Samstag</option>
+                    <option value="0" data-i18n="weekday.0">Sonntag</option>
+                  </select>
+                </label>
+              </div>
+              <div id="calendarMonthlyDomHint" class="calendar-monthly-explainer hidden" role="note" aria-live="polite"></div>
+              <div class="calendar-form-section calendar-form-staff-split">
+                <div class="calendar-field calendar-field-stretch">
+                  <span class="calendar-field-label" id="calendarEmployeeGroupLabel" data-i18n="cal.pickStaffMultiLbl">Mitarbeiter auswählen</span>
+                  <div
+                    id="calendarEmployeeCheckboxes"
+                    class="calendar-employee-checkboxes"
+                    role="group"
+                    aria-labelledby="calendarEmployeeGroupLabel"
+                    data-i18n-aria="cal.pickStaffMultiAria"
+                  ></div>
+                </div>
+                <div class="calendar-field calendar-field-checklist-owner hidden" id="calendarChecklistOwnerWrap">
+                  <span class="calendar-field-label" data-i18n="cal.checklistOwnerLbl">Checkliste bekommt</span>
+                  <select id="calendarChecklistOwnerSelect" class="calendar-control" data-i18n-aria="cal.checklistOwnerAria"></select>
+                  <small class="calendar-field-hint" data-i18n="cal.checklistOwnerExpl">Nur dieser Mitarbeiter sieht „Checkliste“ und kann sie starten.</small>
+                </div>
+              </div>
+              <div class="calendar-form-section calendar-form-details-grid">
+                <div class="calendar-field">
+                  <span class="calendar-field-label" data-i18n="cal.timeRangeLbl">Uhrzeit</span>
+                  <div class="calendar-time-range">
+                    <input id="calendarFromTime" class="calendar-control" type="time" required data-i18n-aria="cal.fromTimeAria" />
+                    <span class="calendar-time-sep" aria-hidden="true">–</span>
+                    <input id="calendarToTime" class="calendar-control" type="time" required data-i18n-aria="cal.toTimeAria" />
+                  </div>
+                </div>
+                <label class="calendar-field">
+                  <span class="calendar-field-label" data-i18n="cal.customerFieldLbl">Kunde</span>
+                  <select id="calendarCustomerSelect" class="calendar-control" required>
+                    <option value="" data-i18n="cal.pickCustomer">Kunde auswählen</option>
+                  </select>
+                </label>
+                <div class="calendar-field calendar-field-span-2-md calendar-work-order-toggle">
+                  <span class="calendar-field-label" data-i18n="wo.calModeLbl">Arbeitsauftrag</span>
+                  <label class="checkbox-line calendar-work-order-cb">
+                    <input id="calendarWorkOrderMode" type="checkbox" />
+                    <span data-i18n="wo.calModeHint">Ohne Checkliste/Prüfpunkte – nur Anweisung im Reiter Arbeitsauftrag</span>
+                  </label>
+                </div>
+                <div class="calendar-field calendar-field-span-2-md hidden" id="calendarWorkOrderPhotoWrap">
+                  <span class="calendar-field-label" data-i18n="wo.calPhotosLbl">Bilder für Mitarbeiter (max. 3)</span>
+                  <small class="calendar-field-hint" id="calendarWorkOrderPhotoHint" data-i18n="wo.photoHintCount">0 / 3 Bilder</small>
+                  <input id="calendarWorkOrderPhotoInput" class="calendar-wo-photo-input" type="file" accept="image/*" multiple />
+                  <div id="calendarWorkOrderPhotoPreview" class="calendar-wo-photo-preview"></div>
+                </div>
+                <div class="calendar-field calendar-field-span-2-md" id="calendarChecklistTplFieldWrap">
+                  <span class="calendar-field-label" id="calendarChecklistTplGroupLabel" data-i18n="cal.chkTplLbl">Checkliste</span>
+                  <div
+                    id="calendarChecklistTemplateCheckboxes"
+                    class="calendar-template-checkboxes"
+                    role="group"
+                    aria-labelledby="calendarChecklistTplGroupLabel"
+                    data-i18n-aria="cal.checklistAria"
+                  ></div>
+                </div>
+                <div class="calendar-field calendar-field-span-2-md hidden" id="calendarHausZonesWrap">
+                  <span class="calendar-field-label" id="calendarHausZonesGroupLabel" data-i18n="cal.hausZonesLbl">Bereiche (nur Haus & Garten)</span>
+                  <div
+                    id="calendarHausZoneCheckboxes"
+                    class="calendar-haus-zone-checkboxes"
+                    role="group"
+                    aria-labelledby="calendarHausZonesGroupLabel"
+                  ></div>
+                  <small class="calendar-field-hint" data-i18n="cal.hausZonesHint">Nur Prüfpunkte der gewählten Bereiche erscheinen in der Checkliste.</small>
+                </div>
+              </div>
+              <label class="calendar-field calendar-field-comment">
+                <span class="calendar-field-label" id="calendarStaffCommentLabelNormal" data-i18n="cal.commentFieldLbl">Kommentar</span>
+                <span class="calendar-field-label hidden" id="calendarStaffCommentLabelWo" data-i18n="wo.calInstructionLbl">Arbeitsanweisung für Mitarbeiter</span>
+                <input id="calendarStaffComment" class="calendar-control" type="text" data-i18n-placeholder="cal.staffCommentPh" />
+              </label>
+              <div class="calendar-form-actions">
+                <button class="secondary-button" id="calendarStaffCancelButton" type="button" data-i18n="cal.cancel">Abbrechen</button>
+                <button class="primary-button" id="calendarStaffSubmitButton" type="submit" data-i18n="cal.add">Hinzufügen</button>
+              </div>
             </form>
             <div class="staff-list" id="calendarStaffList"></div>
+            <dialog class="calendar-copy-dialog" id="calendarCopySingleDialog" aria-labelledby="calendarCopySingleTitle">
+              <form class="calendar-copy-dialog-inner" id="calendarCopySingleForm">
+                <h4 id="calendarCopySingleTitle" data-i18n="cal.copyTitle">Einmaligen Einsatz kopieren</h4>
+                <p class="calendar-copy-dialog-summary" id="calendarCopySingleSummary"></p>
+                <label class="calendar-copy-date-label">
+                  <span data-i18n="cal.copyDateLbl">Zieldatum</span>
+                  <input id="calendarCopySingleDateInput" type="date" data-i18n-aria="cal.copyDateAria" />
+                </label>
+                <div class="dialog-actions">
+                  <button type="button" class="secondary-button" id="calendarCopySingleCancelBtn" data-i18n="cal.cancel">Abbrechen</button>
+                  <button type="submit" class="primary-button" id="calendarCopySingleConfirmBtn" data-i18n="cal.copyConfirm">Kopieren</button>
+                </div>
+              </form>
+            </dialog>
           </div>
         </section>
 
         <section class="worktime-panel hidden" id="worktimePanel">
-          <div class="section-heading">
-            <h2>Arbeitszeiten</h2>
-            <div class="worktime-filter">
-              <select id="worktimeScope" aria-label="Zeitraum">
-                <option value="day">Tag</option>
-                <option value="week">Woche</option>
-                <option value="month">Monat</option>
-              </select>
-              <input id="worktimeDate" type="date" />
+          <div class="employee-day-work hidden" id="employeeDayWorkPanel" aria-labelledby="employeeDayWorkHeading">
+            <div class="section-heading">
+              <h2 id="employeeDayWorkHeading" data-i18n="wt.dailyTitle">Tagesarbeitszeit</h2>
+            </div>
+            <label class="employee-day-work-date">
+              <span data-i18n="wt.date">Datum</span>
+              <input id="employeeWorkDate" type="date" data-i18n-aria="wt.dateAria" />
+            </label>
+            <div class="form-grid employee-day-work-grid">
+              <div class="time-capture">
+                <span data-i18n="wt.come">Kommen</span>
+                <button class="secondary-button" id="dayWorkComeButton" type="button" data-i18n="wt.capture">Zeit erfassen</button>
+                <small id="dayWorkComeDisplay">-</small>
+              </div>
+              <div class="time-capture">
+                <span data-i18n="wt.leave">Gehen</span>
+                <button class="secondary-button" id="dayWorkLeaveButton" type="button" data-i18n="wt.capture">Zeit erfassen</button>
+                <small id="dayWorkLeaveDisplay">-</small>
+              </div>
+              <div class="time-capture employee-day-work-pause-span">
+                <span data-i18n="wt.pause">Pause</span>
+                <div class="day-work-pause-buttons">
+                  <button class="secondary-button" id="dayWorkBreakStartButton" type="button" data-i18n="wt.pauseStart">Pause Start</button>
+                  <button class="secondary-button" id="dayWorkBreakEndButton" type="button" data-i18n="wt.pauseEnd">Pause Ende</button>
+                </div>
+                <small id="dayWorkBreakStartDisplay">Start: -</small>
+                <small id="dayWorkBreakEndDisplay">Ende: -</small>
+              </div>
+            </div>
+
+            <div id="dailyWorkCorrectionWrap" class="daily-work-correction-wrap hidden">
+              <button type="button" class="secondary-button daily-work-correction-toggle" id="dailyWorkCorrectionToggle" aria-expanded="false" aria-controls="dailyWorkCorrectionCollapsible" data-i18n="dc.toggleOpen">Zeit korrigieren</button>
+              <p id="dailyWorkCorrectionPending" class="correction-banner correction-banner-info hidden" role="status"></p>
+              <p id="dailyWorkCorrectionRejected" class="correction-banner correction-banner-warning hidden" role="status"></p>
+              <div id="dailyWorkCorrectionCollapsible" class="daily-work-correction-collapsible hidden">
+                <h3 class="daily-work-correction-title" data-i18n="dc.title">Zeiten korrigieren</h3>
+                <p class="muted" id="dailyWorkCorrectionIntro" data-i18n="dc.intro">Neue Uhrzeiten gelten erst nach Freigabe durch den Chef.</p>
+                <form id="dailyWorkCorrectionForm" class="daily-work-correction-form">
+                  <fieldset class="correction-fieldset">
+                    <legend data-i18n="dc.legend">Korrekturvorschlag</legend>
+                    <div class="correction-times-grid">
+                      <label><span data-i18n="dc.sugCome">Vorschlag Kommen</span>
+                        <input type="time" id="corrSuggestedCome" autocomplete="off" />
+                      </label>
+                      <label><span data-i18n="dc.sugLeave">Vorschlag Gehen</span>
+                        <input type="time" id="corrSuggestedLeave" autocomplete="off" />
+                      </label>
+                      <label><span data-i18n="dc.sugPauseS">Vorschlag Pause Start</span>
+                        <input type="time" id="corrSuggestedBreakStart" autocomplete="off" />
+                      </label>
+                      <label><span data-i18n="dc.sugPauseE">Vorschlag Pause Ende</span>
+                        <input type="time" id="corrSuggestedBreakEnd" autocomplete="off" />
+                      </label>
+                    </div>
+                    <label><span data-i18n="dc.comment">Kommentar</span> <span class="correction-required-mark" aria-hidden="true">*</span>
+                      <textarea id="corrEmployeeNote" class="correction-comment-input" maxlength="2000" rows="2" required data-i18n-placeholder="dc.commentPh" data-i18n-aria="dc.commentAria"></textarea>
+                    </label>
+                  </fieldset>
+                  <button type="submit" class="primary-button correction-submit-btn" id="dailyWorkCorrectionSubmit" data-i18n="dc.submit">Zur Freigabe senden</button>
+                </form>
+              </div>
             </div>
           </div>
-          <div class="worktime-list" id="worktimeList"></div>
+
+          <div id="chefWorktimeSummaryPanel">
+            <div class="section-heading">
+              <h2 data-i18n="wt.panelTitle">Arbeitszeiten</h2>
+              <div class="worktime-filter">
+                <select id="worktimeScope" data-i18n-aria="wt.scopeAria">
+                  <option value="day" data-i18n="wt.opt.day">Tag</option>
+                  <option value="week" data-i18n="wt.opt.week">Woche</option>
+                  <option value="month" data-i18n="wt.opt.month">Monat</option>
+                </select>
+                <select id="worktimeSource" data-i18n-aria="wt.sourceAria">
+                  <option value="daily" data-i18n="wt.opt.sourceDaily">Tagesarbeitszeit</option>
+                  <option value="checklist" data-i18n="wt.opt.sourceCl">Checkliste (am Kunden)</option>
+                  <option value="workOrder" data-i18n="wt.opt.sourceWo">Arbeitsaufträge</option>
+                </select>
+                <div class="worktime-period-shell">
+                  <input type="hidden" id="worktimeDate" value="" autocomplete="off" />
+                  <div class="worktime-period-slot">
+                    <span class="worktime-period-display" id="worktimePeriodDisplay" aria-hidden="true">—</span>
+                  </div>
+                  <div class="worktime-calendar-icon-shell" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v3M16 2v3M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  </div>
+                  <input type="date" id="worktimePickerFace" class="worktime-picker-face" tabindex="-1" aria-hidden="true" title="" />
+                  <button type="button" class="worktime-picker-hitlayer" id="worktimePickerHitLayer" data-i18n-aria="wt.pickerAria"></button>
+                </div>
+              </div>
+            </div>
+            <p class="worktime-source-caption" id="worktimeSourceCaption"></p>
+            <div id="chefDailyCorrectionsWrap" class="chef-daily-corrections-wrap hidden" aria-labelledby="chefDailyCorrectionsHeading">
+              <h3 class="chef-daily-corrections-heading" id="chefDailyCorrectionsHeading" data-i18n="wt.corrHeading">Ausstehende Zeitkorrekturen</h3>
+              <p class="muted chef-daily-corrections-help" data-i18n="wt.corrHelp">Alle Korrekturvorschläge warten auf Freigabe. Die Summen darunter nutzen weiterhin nur freigegebenen Zeiten.</p>
+              <div id="chefDailyCorrectionsList"></div>
+            </div>
+            <div class="worktime-list" id="worktimeList"></div>
+          </div>
         </section>
 
         <section class="worktime-panel hidden" id="checkpointPanel">
           <div class="section-heading">
-            <h2>Prüfpunkte</h2>
+            <h2 data-i18n="cp.heading">Prüfpunkte</h2>
           </div>
           <div class="checkpoint-manager">
+            <label class="checkpoint-manager-template-label">
+              <span data-i18n="cp.manageTpl">Checkliste bearbeiten</span>
+              <select id="checkpointManagerTemplateSelect" data-i18n-aria="cp.manageTplAria"></select>
+            </label>
+            <div class="checkpoint-access-block">
+              <label class="checkbox-line checkpoint-access-all">
+                <input type="checkbox" id="checkpointAccessAllEmployees" checked />
+                <span data-i18n="cp.allowAll">Allen Mitarbeitern diese Checkliste erlauben</span>
+              </label>
+              <p class="checkpoint-access-hint" id="checkpointAccessHintRestricted" data-i18n="cp.restrictHint">Sonst hier freischalten (mehrere möglich):</p>
+              <div id="checkpointEmployeeAccess" class="checkpoint-employee-access"></div>
+            </div>
             <form class="checkpoint-form" id="checkpointForm">
-              <input id="checkpointName" type="text" placeholder="Neuen Prüfpunkt eingeben" required />
-              <button class="primary-button" id="checkpointSaveButton" type="submit">Prüfpunkt speichern</button>
+              <div class="checkpoint-form-row">
+                <label class="checkpoint-lang-field">
+                  <span data-i18n="cp.fieldDeLbl">Deutsch</span>
+                  <input id="checkpointNameDe" type="text" autocomplete="off" data-i18n-placeholder="cp.nameDePh" />
+                </label>
+                <label class="checkpoint-lang-field">
+                  <span data-i18n="cp.fieldEnLbl">Englisch</span>
+                  <input id="checkpointNameEn" type="text" autocomplete="off" data-i18n-placeholder="cp.nameEnPh" />
+                </label>
+                <button class="primary-button" id="checkpointSaveButton" type="submit" data-i18n="cp.saveNew">Prüfpunkt speichern</button>
+              </div>
+              <div class="checkpoint-form-zone-row hidden" id="checkpointHausZoneRow">
+                <label class="checkpoint-zone-field">
+                  <span data-i18n="cp.zoneLbl">Bereich (Haus &amp; Garten)</span>
+                  <select id="checkpointHausZone" data-i18n-aria="cp.zoneAria"></select>
+                </label>
+              </div>
             </form>
             <div class="checkpoint-list" id="checkpointList"></div>
           </div>
         </section>
       </main>
+    </div>
+
+    <div class="image-lightbox hidden" id="imageLightbox" role="dialog" aria-modal="true" aria-label="Bildvorschau">
+      <button class="image-lightbox-close" id="imageLightboxClose" type="button" data-i18n="cal.cancel">Abbrechen</button>
+      <div class="image-lightbox-stage">
+        <img id="imageLightboxImage" alt="" />
+      </div>
     </div>
 
     <template id="itemTemplate">
@@ -287,41 +677,25 @@
             <input type="checkbox" />
             <span contenteditable="true"></span>
           </label>
-          <button class="icon-button remove-item" type="button" title="Prüfpunkt entfernen" aria-label="Prüfpunkt entfernen">
+          <button class="icon-button remove-item" type="button" data-i18n-title="tpl.removePointTitle" data-i18n-aria="tpl.removePointAria">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
         <label class="item-comment-label">
-          Kommentar zum Prüfpunkt
-          <textarea class="item-comment-input" rows="2" placeholder="Optionaler Kommentar..."></textarea>
+          <span data-i18n="tpl.pointComment">Kommentar zum Prüfpunkt</span>
+          <textarea class="item-comment-input" rows="2" data-i18n-placeholder="tpl.pointCommentPh"></textarea>
         </label>
-        <label class="item-photo-label">
-          Bild zum Prüfpunkt
+        <div class="item-photo-label check-item-photo-upload">
+          <span class="check-item-photo-heading" data-i18n="tpl.pointPhoto">Bild zum Prüfpunkt</span>
           <input class="item-photo-input" type="file" accept="image/*" />
-          <span class="item-photo-trigger">Bild auswählen</span>
-          <div class="item-photo-preview"></div>
-        </label>
+          <button type="button" class="item-photo-trigger" data-i18n="tpl.pickPhotoPoint">Bild auswählen</button>
+          <div class="item-photo-preview check-item-photo-preview-shell"></div>
+        </div>
       </div>
     </template>
 
-    <script>
-      (function () {
-        var banner = document.getElementById("debugBanner");
-        function writeDebug(message) {
-          if (!banner) return;
-          banner.textContent = "Debug: " + message;
-          banner.classList.add("visible");
-        }
-        window.cursorDebugLog = writeDebug;
-        window.addEventListener("error", function (event) {
-          writeDebug("JS-Fehler: " + (event && event.message ? event.message : "unbekannt"));
-        });
-        window.addEventListener("unhandledrejection", function () {
-          writeDebug("Promise-Fehler erkannt");
-        });
-        writeDebug("HTML geladen, JS wird gestartet");
-      }());
-    </script>
-    <script src="app.js?v=20260429-8"></script>
+    <script src="vendor/jspdf.umd.min.js?v=20260503-18"></script>
+    <script src="i18n.js?v=20260513-calhauszones"></script>
+    <script src="app.js?v=20260513-calhauszones"></script>
   </body>
 </html>
