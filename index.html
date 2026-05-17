@@ -15,7 +15,7 @@
         }
       }());
     </script>
-    <link rel="stylesheet" href="styles.css?v=20260513-calhauszones" />
+    <link rel="stylesheet" href="styles.css?v=20260515-wo-intro" />
   </head>
   <body>
     <section class="auth-screen" id="authScreen">
@@ -69,6 +69,7 @@
           <button class="module-tab active" type="button" data-section="checklist" data-i18n="nav.checklist">Checkliste</button>
           <button class="module-tab" type="button" data-section="workOrder" data-i18n="nav.workOrder">Arbeitsauftrag</button>
           <button class="module-tab" type="button" data-section="customerDb" id="customerDbTab" data-i18n="nav.customerDb">Kundendatenbank</button>
+          <button class="module-tab" type="button" data-section="guideDb" id="guideDbTab" data-i18n="nav.guideDb">Anleitungsdatenbank</button>
           <button class="module-tab" type="button" data-section="calendar" data-i18n="nav.calendar">Kalender</button>
           <button class="module-tab" type="button" data-section="worktime" id="worktimeTab" data-i18n="nav.worktime">Arbeitszeiten</button>
           <button class="module-tab" type="button" data-section="checkpoints" id="checkpointTab" data-i18n="nav.checkpoints">Prüfpunkte</button>
@@ -335,7 +336,7 @@
               <div class="empty-state work-orders-detail-empty" id="workOrdersDetailEmpty">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                 <h2 data-i18n="wo.detailEmptyTitle">Arbeitsauftrag auswählen</h2>
-                <p data-i18n="wo.detailEmptySub">Alle Details zum Auftrag erscheinen hier.</p>
+                <p data-i18n="wo.detailEmptySub">Anweisungen, Bilder, Kommentare und Kundenbericht erscheinen hier.</p>
               </div>
               <div id="workOrdersDetailBody" class="work-orders-detail-body hidden"></div>
             </section>
@@ -354,12 +355,24 @@
             <input id="dbProject" type="text" required data-i18n-placeholder="cust.phProject" placeholder="Projekt" />
             <input id="dbEmail" type="email" required data-i18n-placeholder="cust.phEmail" placeholder="E-Mailadresse" />
             <input id="dbPhone" type="tel" required data-i18n-placeholder="cust.phPhone" placeholder="Telefonnummer" />
-            <label class="customer-orientation-upload">
-              <span data-i18n="cust.photoLbl">Orientierungsbild (intern, 1 Bild)</span>
-              <input id="dbOrientationPhoto" type="file" accept="image/*" />
-            </label>
-            <div class="customer-orientation-preview" id="dbOrientationPreview" aria-live="polite"></div>
-            <button class="text-button hidden" type="button" id="dbOrientationRemove" data-i18n="cust.photoRemove">Bild entfernen</button>
+            <div class="customer-db-media-pair">
+              <div class="customer-db-media-col">
+                <label class="customer-orientation-upload">
+                  <span data-i18n="cust.photoLbl">Orientierungsbild (intern, 1 Bild)</span>
+                  <input id="dbOrientationPhoto" type="file" accept="image/*" />
+                </label>
+                <div class="customer-orientation-preview" id="dbOrientationPreview" aria-live="polite"></div>
+                <button class="text-button hidden" type="button" id="dbOrientationRemove" data-i18n="cust.photoRemove">Bild entfernen</button>
+              </div>
+              <div class="customer-db-media-col">
+                <label class="customer-contract-upload">
+                  <span data-i18n="cust.contractLbl">Kundenvertrag (PDF)</span>
+                  <input id="dbContractPdf" type="file" accept="application/pdf,.pdf" />
+                </label>
+                <div class="customer-contract-status" id="dbContractStatus" aria-live="polite"></div>
+                <button class="text-button hidden" type="button" id="dbContractRemove" data-i18n="cust.contractRemove">PDF entfernen</button>
+              </div>
+            </div>
             <details class="customer-checkpoints" id="customerCheckpointFieldset">
               <summary data-i18n="cust.detailsCp">Prüfpunkte je Checkliste</summary>
               <label class="customer-checkpoint-template-label">
@@ -371,6 +384,45 @@
             <button class="primary-button" type="submit" data-i18n="cust.save">Kunde speichern</button>
           </form>
           <div class="customer-db-list" id="customerDbList"></div>
+        </section>
+
+        <section class="guide-db-panel hidden" id="guideDbPanel">
+          <div class="section-heading">
+            <h2 data-i18n="guide.heading">Anleitungsdatenbank</h2>
+            <p class="guide-db-intro" data-i18n="guide.intro">Betriebsanleitungen als PDF – für Mitarbeitende jederzeit abrufbar.</p>
+          </div>
+          <form class="guide-db-form" id="guideDbForm">
+            <input id="guideNameDe" type="text" required maxlength="120" data-i18n-placeholder="guide.phNameDe" placeholder="Bezeichnung (Deutsch)" />
+            <input id="guideNameEn" type="text" required maxlength="120" data-i18n-placeholder="guide.phNameEn" placeholder="Bezeichnung (Englisch)" />
+            <div class="guide-pdf-uploads">
+              <div class="guide-pdf-col">
+                <label class="guide-pdf-upload">
+                  <span data-i18n="guide.pdfDe">PDF Deutsch</span>
+                  <input id="guidePdfDe" type="file" accept="application/pdf,.pdf" />
+                </label>
+                <div class="guide-pdf-status" id="guidePdfDeStatus" aria-live="polite"></div>
+                <button class="text-button hidden" type="button" id="guidePdfDeRemove" data-i18n="guide.pdfRemove">PDF entfernen</button>
+              </div>
+              <div class="guide-pdf-col">
+                <label class="guide-pdf-upload">
+                  <span data-i18n="guide.pdfEn">PDF Englisch</span>
+                  <input id="guidePdfEn" type="file" accept="application/pdf,.pdf" />
+                </label>
+                <div class="guide-pdf-status" id="guidePdfEnStatus" aria-live="polite"></div>
+                <button class="text-button hidden" type="button" id="guidePdfEnRemove" data-i18n="guide.pdfRemove">PDF entfernen</button>
+              </div>
+              <div class="guide-pdf-col">
+                <label class="guide-pdf-upload">
+                  <span data-i18n="guide.pdfEs">PDF Spanisch</span>
+                  <input id="guidePdfEs" type="file" accept="application/pdf,.pdf" />
+                </label>
+                <div class="guide-pdf-status" id="guidePdfEsStatus" aria-live="polite"></div>
+                <button class="text-button hidden" type="button" id="guidePdfEsRemove" data-i18n="guide.pdfRemove">PDF entfernen</button>
+              </div>
+            </div>
+            <button class="primary-button" type="submit" id="guideDbSaveButton" data-i18n="guide.save">Anleitung speichern</button>
+          </form>
+          <div class="guide-db-list" id="guideDbList"></div>
         </section>
 
         <section class="calendar-panel hidden" id="calendarPanel">
@@ -695,7 +747,7 @@
     </template>
 
     <script src="vendor/jspdf.umd.min.js?v=20260503-18"></script>
-    <script src="i18n.js?v=20260513-calhauszones"></script>
-    <script src="app.js?v=20260513-calhauszones"></script>
+    <script src="i18n.js?v=20260515-wo-intro"></script>
+    <script src="app.js?v=20260515-wo-intro"></script>
   </body>
 </html>

@@ -6,7 +6,12 @@ const recurringScheduleRulesKey = "werkstattcheck-recurring-schedule-rules-v1";
 const workOrdersStateKey = "werkstattcheck-work-orders-v1";
 const WORK_ORDER_ASSIGNMENT_KIND = "workOrder";
 const WORK_ORDER_MAX_CHEF_PHOTOS = 3;
+const WORK_ORDER_MAX_RESULT_PHOTOS = 5;
 const customerDbKey = "werkstattcheck-customer-db-v1";
+const guideDbKey = "werkstattcheck-guide-db-v1";
+const GUIDE_PDF_LANGS = ["de", "en", "es"];
+const CUSTOMER_STATUS_ACTIVE = "active";
+const CUSTOMER_STATUS_INACTIVE = "inactive";
 const checkpointCatalogKey = "werkstattcheck-checkpoint-catalog-v1";
 const checklistTemplatesKey = "werkstattcheck-checklist-templates-v2";
 const HAUS_CHECKLIST_TEMPLATE_ID = "haus_garten";
@@ -14,6 +19,8 @@ const PUTZ_CHECKLIST_TEMPLATE_ID = "putzplan_haus";
 /** Nur „Haus & Garten“: Prüfpunkte sind einem Bereich zugeordnet (Persistenz im Vorlagen-Array). */
 const HAUS_CHECKPOINT_ZONE_IDS = ["general", "pool", "zone_1", "zone_2", "zone_3", "zone_4"];
 const DEFAULT_HAUS_CHECKPOINT_ZONE = "general";
+/** Speicher-/Formularschlüssel: zone::kanonischer Text (gleicher Text in mehreren Bereichen möglich). */
+const HAUS_CHECKPOINT_ROW_KEY_SEP = "::";
 /** Select-Optionen neu bauen, wenn sich die Bereichsliste ändert (Cache `dataset.ready` reicht nicht). */
 const HAUS_CHECKPOINT_ZONE_SELECT_BUILD = "v2-general";
 const fallbackCheckpointItems = [
@@ -42,7 +49,8 @@ const users = [
     password: "123",
     role: "boss",
     label: "Kristina",
-    manageEmployeeUsernames: ["reinigungspaar"]
+    manageEmployeeUsernames: ["reinigungspaar"],
+    allowedChecklistTemplateIds: [PUTZ_CHECKLIST_TEMPLATE_ID]
   }
 ];
 
@@ -56,6 +64,42 @@ function enrichCurrentSessionFromUsers() {
   } else {
     delete currentSession.manageEmployeeUsernames;
   }
+  if (Array.isArray(u.allowedChecklistTemplateIds) && u.allowedChecklistTemplateIds.length) {
+    currentSession.allowedChecklistTemplateIds = u.allowedChecklistTemplateIds.slice();
+  } else {
+    delete currentSession.allowedChecklistTemplateIds;
+  }
+}
+
+function getAllowedChecklistTemplateIdsForSession() {
+  if (!currentSession) return null;
+  const fromSession = currentSession.allowedChecklistTemplateIds;
+  if (Array.isArray(fromSession) && fromSession.length) {
+    return fromSession.filter((id) => checklistTemplates.some((t) => t.id === id));
+  }
+  const u = users.find((x) => x.username === currentSession.username && x.role === currentSession.role);
+  if (u && Array.isArray(u.allowedChecklistTemplateIds) && u.allowedChecklistTemplateIds.length) {
+    return u.allowedChecklistTemplateIds.filter((id) => checklistTemplates.some((t) => t.id === id));
+  }
+  return null;
+}
+
+function sessionMayAccessChecklistTemplate(templateId) {
+  const allowed = getAllowedChecklistTemplateIdsForSession();
+  if (!allowed) return true;
+  return allowed.includes(String(templateId || "").trim());
+}
+
+function getChecklistTemplatesForSession() {
+  const allowed = getAllowedChecklistTemplateIdsForSession();
+  if (!allowed) return checklistTemplates;
+  return checklistTemplates.filter((t) => allowed.includes(t.id));
+}
+
+function getDefaultChecklistTemplateIdForSession() {
+  const allowed = getAllowedChecklistTemplateIdsForSession();
+  if (allowed && allowed.length) return allowed[0];
+  return HAUS_CHECKLIST_TEMPLATE_ID;
 }
 
 function isFullChefSession() {
@@ -110,14 +154,22 @@ function isWorkOrderManagementViewer() {
 
 function assertBossMayAccessSubmission(entry) {
   if (!entry || currentRole !== "boss") return true;
+  const tplId = entry.checklistTemplateId || HAUS_CHECKLIST_TEMPLATE_ID;
+  if (!sessionMayAccessChecklistTemplate(tplId)) return false;
   if (!isRestrictedBossSession()) return true;
   return submissionBelongsToManagedEmployee(entry);
 }
 
 function submissionsVisibleToCurrentBoss() {
   if (!currentSession || currentSession.role !== "boss") return submissions;
-  if (!isRestrictedBossSession()) return submissions;
-  return submissions.filter(submissionBelongsToManagedEmployee);
+  let pool = submissions;
+  if (getAllowedChecklistTemplateIdsForSession()) {
+    pool = pool.filter((entry) => sessionMayAccessChecklistTemplate(entry.checklistTemplateId || HAUS_CHECKLIST_TEMPLATE_ID));
+  }
+  if (isRestrictedBossSession()) {
+    pool = pool.filter(submissionBelongsToManagedEmployee);
+  }
+  return pool;
 }
 
 const WC = typeof window !== "undefined" ? window.WerkstattCheckI18n : null;
@@ -171,6 +223,100 @@ function collectLedgerMonthKeysForCustomer(customerEntry) {
   const set = new Set();
   ledger.forEach((row) => {
     if (row && row.monthKey) set.add(row.monthKey);
+  });
+  return [...set].sort().reverse();
+}
+
+function dateToMonthKey(dateLike) {
+  const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function isoDateToMonthKey(isoDate) {
+  const s = String(isoDate || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(0, 7);
+  return "";
+}
+
+function resolveSubmissionCustomerId(submission) {
+  const cid = submission && submission.customerId ? String(submission.customerId).trim() : "";
+  if (cid) return cid;
+  const name = submission && submission.customerName ? String(submission.customerName).trim().toLowerCase() : "";
+  if (!name) return "";
+  const hit = customerDb.find((c) => `${c.firstName} ${c.lastName}`.trim().toLowerCase() === name);
+  return hit ? hit.id : "";
+}
+
+function resolveSubmissionAssignmentDateIso(submission) {
+  const aid = String(submission && submission.assignmentId || "").trim();
+  if (!aid) return "";
+  const keys = Object.keys(staffSchedule);
+  for (let i = 0; i < keys.length; i += 1) {
+    const dateIso = keys[i];
+    const day = staffSchedule[dateIso];
+    if (!Array.isArray(day)) continue;
+    if (day.some((e) => e && e.id === aid && !isRecurringOccurrenceSkipEntry(e))) return dateIso;
+  }
+  return "";
+}
+
+function getSubmissionWorkTimeMonthKey(submission) {
+  const fromAssignment = isoDateToMonthKey(resolveSubmissionAssignmentDateIso(submission));
+  if (fromAssignment) return fromAssignment;
+  return dateToMonthKey(submission.submittedAt || submission.createdAt || 0);
+}
+
+/** Netto-Minuten aus Checklisten- und Arbeitsauftrags-Zeitstempeln, allen MA summiert. */
+function collectAllCustomerWorkTimeRecords() {
+  const records = [];
+  submissions.forEach((sub) => {
+    const minutes = getChecklistAttendanceNetMinutes(sub);
+    if (minutes <= 0) return;
+    const customerId = resolveSubmissionCustomerId(sub);
+    if (!customerId) return;
+    const assignmentDate = resolveSubmissionAssignmentDateIso(sub);
+    const dateIso = assignmentDate || toIsoDate(new Date(sub.submittedAt || sub.createdAt || Date.now()));
+    const monthKey = getSubmissionWorkTimeMonthKey(sub);
+    if (!monthKey) return;
+    records.push({
+      customerId,
+      monthKey,
+      dateIso,
+      minutes,
+      source: "checklist",
+      employeeLabel: String(sub.employeeName || sub.employeeUsername || "").trim() || t("sub.employeeDefault"),
+      detail: String(sub.checklistTemplateName || sub.jobTitle || "").trim() || t("sub.tplFallback")
+    });
+  });
+
+  collectWorkOrderRowsForViewer().forEach((row) => {
+    const minutes = getWorkOrderAttendanceNetMinutes(row.stateRow);
+    if (minutes <= 0) return;
+    const customerId = String(row.entry.customerId || "").trim();
+    if (!customerId) return;
+    const dateIso = String(row.dateIso || "").trim();
+    const monthKey = isoDateToMonthKey(dateIso);
+    if (!monthKey) return;
+    const empUser = row.entry.employeeUsername || "";
+    records.push({
+      customerId,
+      monthKey,
+      dateIso,
+      minutes,
+      source: "workorder",
+      employeeLabel: getEmployeeLabelByUsername(empUser) || row.entry.name || empUser || t("sub.employeeDefault"),
+      detail: t("wo.calRowType")
+    });
+  });
+
+  return records;
+}
+
+function collectCustomerWorkTimeMonthKeys(customerId, allRecords) {
+  const set = new Set();
+  allRecords.forEach((r) => {
+    if (r.customerId === customerId && r.monthKey) set.add(r.monthKey);
   });
   return [...set].sort().reverse();
 }
@@ -248,6 +394,69 @@ function hausCheckpointZoneFromDef(def) {
   }
   const loc = normalizeCheckpointDef(def, { explicit: true });
   return inferHausZoneFromCheckpointLocales(loc);
+}
+
+function hausCheckpointRowKey(def) {
+  const canon = checkpointCanonical(def);
+  if (!canon) return "";
+  return `${hausCheckpointZoneFromDef(def)}${HAUS_CHECKPOINT_ROW_KEY_SEP}${canon}`;
+}
+
+function parseHausCheckpointStoredKey(key) {
+  const s = String(key || "").trim();
+  const sep = HAUS_CHECKPOINT_ROW_KEY_SEP;
+  const i = s.indexOf(sep);
+  if (i < 0) return { zone: null, canon: s };
+  const zone = s.slice(0, i);
+  const canon = s.slice(i + sep.length);
+  if (!isHausCheckpointZoneId(zone) || !canon) return { zone: null, canon: s };
+  return { zone, canon };
+}
+
+function hausStoredKeyMatchesDef(storedKey, def) {
+  const sk = String(storedKey || "").trim();
+  if (!sk) return false;
+  if (sk === hausCheckpointRowKey(def)) return true;
+  const parsed = parseHausCheckpointStoredKey(sk);
+  if (parsed.zone) {
+    return parsed.zone === hausCheckpointZoneFromDef(def) && parsed.canon === checkpointCanonical(def);
+  }
+  return parsed.canon === checkpointCanonical(def);
+}
+
+function hausStoredKeySetHasDef(keySet, def) {
+  const set = keySet instanceof Set ? keySet : new Set(keySet);
+  for (const k of set) {
+    if (hausStoredKeyMatchesDef(k, def)) return true;
+  }
+  return false;
+}
+
+function normalizeHausCustomerCheckpointKeysForSave(keys, template) {
+  const cps = (template && template.checkpoints) || [];
+  const out = [];
+  const seen = new Set();
+  (keys || []).forEach((key) => {
+    const sk = String(key || "").trim();
+    if (!sk) return;
+    const parsed = parseHausCheckpointStoredKey(sk);
+    if (parsed.zone) {
+      if (!seen.has(sk)) {
+        seen.add(sk);
+        out.push(sk);
+      }
+      return;
+    }
+    cps.forEach((def) => {
+      if (checkpointCanonical(def) !== parsed.canon) return;
+      const rk = hausCheckpointRowKey(def);
+      if (rk && !seen.has(rk)) {
+        seen.add(rk);
+        out.push(rk);
+      }
+    });
+  });
+  return out;
 }
 
 /**
@@ -329,15 +538,14 @@ function appendHausGroupedChecklistItemRows(targetEl, tmpl, filterCanonSet) {
   HAUS_CHECKPOINT_ZONE_IDS.forEach((zoneId) => {
     const zoneDefs = (tmpl.checkpoints || []).filter((def) => {
       if (hausCheckpointZoneFromDef(def) !== zoneId) return false;
-      const c = checkpointCanonical(def);
-      if (wanted && !wanted.has(c)) return false;
+      if (wanted && !hausStoredKeySetHasDef(wanted, def)) return false;
       return true;
     });
     if (!zoneDefs.length) return;
     const { wrap, inner } = createChecklistZoneGroupShell(zoneId);
     targetEl.appendChild(wrap);
     zoneDefs.forEach((def) => {
-      addChecklistItem(def, false, "", null, checkpointCanonical(def), inner);
+      addChecklistItem(def, false, "", null, hausCheckpointRowKey(def), inner);
     });
   });
 }
@@ -356,17 +564,20 @@ function appendHausGroupedSubmissionChecklistRows(targetEl, tmpl, entryItems) {
     const zoneDefs = (tmpl.checkpoints || []).filter((def) => hausCheckpointZoneFromDef(def) === zoneId);
     const innerPairs = [];
     zoneDefs.forEach((def) => {
-      const c = checkpointCanonical(def);
-      const row = byCanon.get(c);
+      const rowKey = hausCheckpointRowKey(def);
+      const canon = checkpointCanonical(def);
+      const row = byCanon.get(rowKey) || byCanon.get(canon);
       if (!row) return;
-      innerPairs.push({ row, c });
+      innerPairs.push({ row, rowKey });
     });
     if (!innerPairs.length) return;
     const { wrap, inner } = createChecklistZoneGroupShell(zoneId);
     targetEl.appendChild(wrap);
-    innerPairs.forEach(({ row, c }) => {
-      used.add(c);
-      addChecklistItem(row.locales || row.text, row.checked, row.comment || "", row.photo || null, c, inner);
+    innerPairs.forEach(({ row, rowKey }) => {
+      used.add(rowKey);
+      const stored = String(row.checkpointCanon || "").trim();
+      if (stored) used.add(stored);
+      addChecklistItem(row.locales || row.text, row.checked, row.comment || "", row.photo || null, rowKey, inner);
     });
   });
   const orphans = entryItems.filter((it) => {
@@ -429,6 +640,17 @@ function resolveLocalesFromTemplateCanon(templateId, canon) {
   if (!key) return normalizeCheckpointDef("");
   const tmpl = getChecklistTemplateById(templateId);
   if (!tmpl || !Array.isArray(tmpl.checkpoints)) return normalizeCheckpointDef(key);
+  if (templateId === HAUS_CHECKLIST_TEMPLATE_ID) {
+    const parsed = parseHausCheckpointStoredKey(key);
+    if (parsed.zone) {
+      const zHit = tmpl.checkpoints.find((def) => (
+        hausCheckpointZoneFromDef(def) === parsed.zone && checkpointCanonical(def) === parsed.canon
+      ));
+      if (zHit) return normalizeCheckpointDef(zHit, { explicit: true });
+    }
+    const canonHits = tmpl.checkpoints.filter((def) => checkpointCanonical(def) === parsed.canon);
+    if (canonHits.length >= 1) return normalizeCheckpointDef(canonHits[0], { explicit: true });
+  }
   const hit = tmpl.checkpoints.find((def) => checkpointCanonical(def) === key);
   return hit ? normalizeCheckpointDef(hit, { explicit: true }) : normalizeCheckpointDef(key);
 }
@@ -663,7 +885,11 @@ function collectCheckpointSetsForCustomerSave() {
   flushPendingCustomerCheckpointSelection();
   const result = {};
   checklistTemplates.forEach((t) => {
-    result[t.id] = [...(pendingCustomerCheckpointSets[t.id] || [])];
+    let list = [...(pendingCustomerCheckpointSets[t.id] || [])];
+    if (t.id === HAUS_CHECKLIST_TEMPLATE_ID) {
+      list = normalizeHausCustomerCheckpointKeysForSave(list, t);
+    }
+    result[t.id] = list;
   });
   return result;
 }
@@ -682,11 +908,12 @@ function renderCustomerCheckpointOptions(selectedList) {
       const rows = (template.checkpoints || []).filter((item) => hausCheckpointZoneFromDef(item) === zoneId);
       if (!rows.length) return "";
       const inner = rows.map((item) => {
-        const canon = checkpointCanonical(item);
+        const rowKey = hausCheckpointRowKey(item);
         const labelText = checkpointDefLabelDeSlashEn(item);
+        const checked = hausStoredKeySetHasDef(selectedSet, item);
         return `
     <label>
-      <input type="checkbox" value="${escapeHtml(canon)}" ${selectedSet.has(canon) ? "checked" : ""} />
+      <input type="checkbox" value="${escapeHtml(rowKey)}" ${checked ? "checked" : ""} />
       <span>${escapeHtml(labelText)}</span>
     </label>`;
       }).join("");
@@ -713,8 +940,18 @@ function renderCustomerCheckpointOptions(selectedList) {
 function refreshCustomerCheckpointOptions() {
   const tid = el.customerCheckpointTemplateSelect ? el.customerCheckpointTemplateSelect.value : HAUS_CHECKLIST_TEMPLATE_ID;
   const cps = (getChecklistTemplateById(tid) || {}).checkpoints || [];
-  const valid = new Set(cps.map((cp) => checkpointCanonical(cp)));
-  const selected = (pendingCustomerCheckpointSets[tid] || []).filter((name) => valid.has(name));
+  const valid = new Set(
+    tid === HAUS_CHECKLIST_TEMPLATE_ID
+      ? cps.map((cp) => hausCheckpointRowKey(cp))
+      : cps.map((cp) => checkpointCanonical(cp))
+  );
+  const selected = (pendingCustomerCheckpointSets[tid] || []).filter((name) => {
+    if (valid.has(name)) return true;
+    if (tid === HAUS_CHECKLIST_TEMPLATE_ID) {
+      return cps.some((cp) => hausStoredKeyMatchesDef(name, cp));
+    }
+    return false;
+  });
   renderCustomerCheckpointOptions(selected);
 }
 
@@ -727,6 +964,7 @@ let bossChecklistFilterSignature = "";
 /** Zuletzt für Checklisten-Spantexte synchrone UI-Sprache (für Locale-Wechsel). */
 let checkpointFormSyncedUiLang = null;
 let customerDb = loadCustomerDb();
+let guideDb = loadGuideDb();
 /** Wird von loadSubmissions gesetzt, wenn eine Kunden-Mail aus Stammdaten ergänzt wurde. */
 let submissionEmailBackfillDirty = false;
 let submissions = loadSubmissions();
@@ -754,10 +992,15 @@ let activeAssignmentId = "";
 let activeCustomerDbId = "";
 /** Monatsfilter für Zusatzkosten je Kunden-ID (`""` = alle Monate). */
 let customerDbExtraMonthByCustomerId = Object.create(null);
+let customerDbWorkMonthByCustomerId = Object.create(null);
 let activeCheckpointEditIndex = -1;
 let calendarPlanningOpen = false;
 let activeCustomerId = "";
 let pendingCustomerOrientationPhoto = null;
+let pendingCustomerContractPdf = null;
+const MAX_CUSTOMER_CONTRACT_PDF_BYTES = 8 * 1024 * 1024;
+let activeGuideDbId = "";
+let pendingGuidePdfs = { de: null, en: null, es: null };
 let activeRecurringRuleId = "";
 let activeSingleAssignmentId = "";
 let pendingCopySingleEntryId = "";
@@ -794,6 +1037,7 @@ const el = {
   moduleTabs: document.getElementById("moduleTabs"),
   moduleTabButtons: document.querySelectorAll(".module-tab"),
   customerDbTab: document.getElementById("customerDbTab"),
+  guideDbTab: document.getElementById("guideDbTab"),
   worktimeTab: document.getElementById("worktimeTab"),
   checkpointTab: document.getElementById("checkpointTab"),
   roleEyebrow: document.getElementById("roleEyebrow"),
@@ -849,6 +1093,21 @@ const el = {
   leaveTimeDisplay: document.getElementById("leaveTimeDisplay")
   ,
   customerDbPanel: document.getElementById("customerDbPanel"),
+  guideDbPanel: document.getElementById("guideDbPanel"),
+  guideDbForm: document.getElementById("guideDbForm"),
+  guideDbList: document.getElementById("guideDbList"),
+  guideNameDe: document.getElementById("guideNameDe"),
+  guideNameEn: document.getElementById("guideNameEn"),
+  guidePdfDe: document.getElementById("guidePdfDe"),
+  guidePdfEn: document.getElementById("guidePdfEn"),
+  guidePdfEs: document.getElementById("guidePdfEs"),
+  guidePdfDeStatus: document.getElementById("guidePdfDeStatus"),
+  guidePdfEnStatus: document.getElementById("guidePdfEnStatus"),
+  guidePdfEsStatus: document.getElementById("guidePdfEsStatus"),
+  guidePdfDeRemove: document.getElementById("guidePdfDeRemove"),
+  guidePdfEnRemove: document.getElementById("guidePdfEnRemove"),
+  guidePdfEsRemove: document.getElementById("guidePdfEsRemove"),
+  guideDbSaveButton: document.getElementById("guideDbSaveButton"),
   worktimePanel: document.getElementById("worktimePanel"),
   employeeDayWorkPanel: document.getElementById("employeeDayWorkPanel"),
   chefWorktimeSummaryPanel: document.getElementById("chefWorktimeSummaryPanel"),
@@ -908,6 +1167,9 @@ const el = {
   dbOrientationPhoto: document.getElementById("dbOrientationPhoto"),
   dbOrientationPreview: document.getElementById("dbOrientationPreview"),
   dbOrientationRemove: document.getElementById("dbOrientationRemove"),
+  dbContractPdf: document.getElementById("dbContractPdf"),
+  dbContractStatus: document.getElementById("dbContractStatus"),
+  dbContractRemove: document.getElementById("dbContractRemove"),
   customerCheckpointTemplateSelect: document.getElementById("customerCheckpointTemplateSelect"),
   customerCheckpointOptions: document.getElementById("customerCheckpointOptions"),
   calendarPanel: document.getElementById("calendarPanel"),
@@ -1071,6 +1333,9 @@ function normalizeWorkOrderStateRow(raw) {
     : new Date().toISOString();
   let createdAt = typeof raw.createdAt === "string" && raw.createdAt.trim() ? raw.createdAt.trim() : "";
   if (!createdAt) createdAt = updatedAt;
+  const emailSentAt = typeof raw.emailSentAt === "string" ? raw.emailSentAt.trim() : "";
+  const bossComment = typeof raw.bossComment === "string" ? raw.bossComment : "";
+  const completedAt = typeof raw.completedAt === "string" ? raw.completedAt.trim() : "";
   return {
     id: typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : createId(),
     assignmentId,
@@ -1079,9 +1344,111 @@ function normalizeWorkOrderStateRow(raw) {
     employeeReply,
     employeeComeAt,
     employeeLeaveAt,
+    emailSentAt,
+    bossComment,
+    completedAt,
     createdAt,
     updatedAt
   };
+}
+
+function customerReportParagraphsForEntry(entry) {
+  if (isWorkOrderReportEntry(entry)) {
+    return [t("wo.reportIntroP1"), t("wo.reportIntroP2"), t("wo.reportIntroP3")];
+  }
+  return [t("preview.introP1"), t("preview.introP2"), t("preview.introP3")];
+}
+
+function isWorkOrderReportEntry(entry) {
+  return Boolean(entry && entry.reportKind === "workOrder");
+}
+
+function findWorkOrderRowPayload(assignmentId, dateIso) {
+  const aid = String(assignmentId || "").trim();
+  const d = String(dateIso || "").trim();
+  if (!aid || !d) return null;
+  return collectWorkOrderRowsForViewer().find((r) => r.entry.id === aid && r.dateIso === d) || null;
+}
+
+function buildWorkOrderReportEntry(row) {
+  const { dateIso, entry, stateRow, employeeReply } = row;
+  const empLabel = getEmployeeLabelByUsername(entry.employeeUsername || "");
+  const projectLabel = String(entry.project || "").trim()
+    || String(entry.customerName || "").trim()
+    || t("wo.reportTitleFallback");
+  const chefPhotos = sanitizeWorkOrderChefImages(entry.workOrderImages || []);
+  const resultPhotos = sanitizeWorkOrderChefImages(entry.workOrderResultImages || []);
+  const completedAt = stateRow && stateRow.status === "done"
+    ? (stateRow.completedAt || stateRow.updatedAt || "")
+    : "";
+  return {
+    reportKind: "workOrder",
+    jobTitle: projectLabel,
+    customerName: entry.customerName || "",
+    customerAddress: entry.customerAddress || "",
+    customerId: entry.customerId || "",
+    customerEmail: entry.customerEmail || "",
+    employeeName: empLabel,
+    employeeComment: employeeReply || "",
+    staffInstruction: entry.staffComment || "",
+    approvedAt: completedAt,
+    submittedAt: stateRow ? stateRow.updatedAt : "",
+    createdAt: stateRow ? stateRow.createdAt : "",
+    emailSentAt: stateRow ? stateRow.emailSentAt || "" : "",
+    bossComment: stateRow ? (stateRow.bossComment || "") : "",
+    workOrderDateIso: dateIso,
+    workOrderFromTime: entry.fromTime || "",
+    workOrderToTime: entry.toTime || "",
+    employeeComeAt: stateRow ? stateRow.employeeComeAt || "" : "",
+    employeeLeaveAt: stateRow ? stateRow.employeeLeaveAt || "" : "",
+    checklistTemplateName: t("wo.reportTypeLabel"),
+    items: [],
+    photos: resultPhotos.filter((ph) => ph && ph.data).map((ph) => ({ data: ph.data }))
+  };
+}
+
+function getWorkOrderClosingReportText(entry) {
+  return String(entry && entry.bossComment || "").trim();
+}
+
+function formatWorkOrderClosingReportHtml(closingText) {
+  const raw = String(closingText || "").trim();
+  if (!raw) return `<p>${escapeHtml(t("wo.reportScopeEmpty"))}</p>`;
+  return raw.split(/\n/).map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+}
+
+function persistWorkOrderBossComment(assignmentId, dateIso, text) {
+  const row = ensureWorkOrderState(assignmentId, dateIso);
+  row.bossComment = String(text || "").trim();
+  row.updatedAt = new Date().toISOString();
+  persistWorkOrders();
+}
+
+async function sendWorkOrderCustomerReport(row, options) {
+  const opts = options && typeof options === "object" ? options : {};
+  const reportEntry = buildWorkOrderReportEntry(row);
+  const email = resolveCustomerEmailForEntry(reportEntry);
+  if (!email) {
+    if (!opts.silent) showToast(t("toast.customerEmailMissing"));
+    return false;
+  }
+  reportEntry.customerEmail = email;
+  let pdfBlob = null;
+  try {
+    pdfBlob = await generateCustomerReportPdfBlob(reportEntry);
+  } catch (err) {
+    console.error(err);
+    if (!opts.silent) showToast(t("toast.pdfError"));
+  }
+  await sendCustomerEmailWithPdf(reportEntry, pdfBlob);
+  const st = findWorkOrderState(row.entry.id, row.dateIso);
+  if (st && reportEntry.emailSentAt) {
+    st.emailSentAt = reportEntry.emailSentAt;
+    if (!st.completedAt && st.status === "done") st.completedAt = new Date().toISOString();
+    persistWorkOrders();
+  }
+  if (!opts.silent && reportEntry.emailSentAt) showToast(t("wo.toastReportSent"));
+  return Boolean(reportEntry.emailSentAt);
 }
 
 function findWorkOrderState(assignmentId, dateIso) {
@@ -1116,6 +1483,11 @@ function setWorkOrderStateStatus(assignmentId, dateIso, status) {
   const row = ensureWorkOrderState(assignmentId, dateIso);
   row.status = status;
   row.updatedAt = new Date().toISOString();
+  if (status === "done") {
+    if (!row.completedAt) row.completedAt = row.updatedAt;
+  } else {
+    row.completedAt = "";
+  }
   persistWorkOrders();
 }
 
@@ -1163,8 +1535,8 @@ async function handleWorkOrderResultPhotoPick(assignmentId, dateIso, fileList) {
   if (!isWorkOrderAssignment(entry)) return;
   let cur = sanitizeWorkOrderChefImages(entry.workOrderResultImages || []).slice();
   for (let fi = 0; fi < files.length; fi += 1) {
-    if (cur.length >= WORK_ORDER_MAX_CHEF_PHOTOS) {
-      showToast(t("wo.maxPhotos"));
+    if (cur.length >= WORK_ORDER_MAX_RESULT_PHOTOS) {
+      showToast(t("wo.maxResultPhotos"));
       break;
     }
     const file = files[fi];
@@ -1173,11 +1545,11 @@ async function handleWorkOrderResultPhotoPick(assignmentId, dateIso, fileList) {
       reader.onload = async () => {
         try {
           const ph = await finalizeUploadedChecklistImage(reader.result, file.name);
-          if (cur.length < WORK_ORDER_MAX_CHEF_PHOTOS) cur.push(ph);
+          if (cur.length < WORK_ORDER_MAX_RESULT_PHOTOS) cur.push(ph);
         } catch (err) {
           console.error(err);
           const rawData = reader.result;
-          if (typeof rawData === "string" && rawData.startsWith("data:image/") && cur.length < WORK_ORDER_MAX_CHEF_PHOTOS) {
+          if (typeof rawData === "string" && rawData.startsWith("data:image/") && cur.length < WORK_ORDER_MAX_RESULT_PHOTOS) {
             cur.push({ name: file.name, data: rawData });
           }
         }
@@ -1241,6 +1613,32 @@ function removeWorkOrderStateForAssignment(aid, dateIso) {
   }
 }
 
+function deleteWorkOrderAssignment(assignmentId, dateIso) {
+  const id = String(assignmentId || "").trim();
+  const d = String(dateIso || "").trim();
+  if (!id || !d) return false;
+  const list = staffSchedule[d];
+  if (!Array.isArray(list)) return false;
+  const entry = list.find((item) => item.id === id);
+  if (!entry || !isWorkOrderAssignment(entry)) return false;
+  if (!bossMayManageAssignmentEmployee(entry.employeeUsername || "")) {
+    showToast(t("toast.managedStaffOnly"));
+    return false;
+  }
+  removeWorkOrderStateForAssignment(id, d);
+  staffSchedule[d] = list.filter((e) => e.id !== id);
+  if (!staffSchedule[d].length) delete staffSchedule[d];
+  persistSchedule();
+  if (activeWorkOrderAssignmentId === id && activeWorkOrderDateIso === d) {
+    activeWorkOrderAssignmentId = "";
+    activeWorkOrderDateIso = "";
+  }
+  renderWorkOrdersPanel();
+  renderCalendar();
+  showToast(t("toast.woDeleted"));
+  return true;
+}
+
 function pruneOrphanWorkOrderStates() {
   const valid = new Set();
   Object.keys(staffSchedule).forEach((dateIso) => {
@@ -1272,7 +1670,12 @@ function sanitizeChecklistTemplateIdsArray(raw) {
     const s = String(raw).trim();
     if (known.has(s)) out.push(s);
   }
-  return out.length ? out : [HAUS_CHECKLIST_TEMPLATE_ID];
+  const allowed = getAllowedChecklistTemplateIdsForSession();
+  if (allowed) {
+    out = out.filter((id) => allowed.includes(id));
+    if (!out.length) out.push(allowed[0]);
+  }
+  return out.length ? out : [getDefaultChecklistTemplateIdForSession()];
 }
 
 function normalizeAssignmentTemplateIds(ref) {
@@ -1321,8 +1724,8 @@ function filterCustomerHausCheckpointsByZones(customer, zoneIds) {
   if (!tmpl || !zones.length) return [...cust];
   const zoneSet = new Set(zones);
   return (tmpl.checkpoints || [])
-    .filter((def) => cust.has(checkpointCanonical(def)) && zoneSet.has(hausCheckpointZoneFromDef(def)))
-    .map((def) => checkpointCanonical(def));
+    .filter((def) => zoneSet.has(hausCheckpointZoneFromDef(def)) && hausStoredKeySetHasDef(cust, def))
+    .map((def) => hausCheckpointRowKey(def));
 }
 
 function validateCustomerHasHausCheckpointsInZones(customer, zoneIds) {
@@ -1394,7 +1797,9 @@ function loadCustomerDb() {
     return parsed.map((c) =>
       Object.assign({}, c, {
         extraCostLedger: Array.isArray(c.extraCostLedger) ? c.extraCostLedger : [],
-        orientationPhoto: sanitizeStoredChecklistPhoto(c.orientationPhoto)
+        orientationPhoto: sanitizeStoredChecklistPhoto(c.orientationPhoto),
+        contractPdf: sanitizeStoredCustomerContractPdf(c.contractPdf),
+        status: sanitizeCustomerStatus(c.status)
       })
     );
   } catch (error) {
@@ -1404,6 +1809,260 @@ function loadCustomerDb() {
 
 function persistCustomerDb() {
   localStorage.setItem(customerDbKey, JSON.stringify(customerDb));
+}
+
+function loadGuideDb() {
+  const stored = localStorage.getItem(guideDbKey);
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((g) => sanitizeGuideEntry(g));
+  } catch (error) {
+    return [];
+  }
+}
+
+function persistGuideDb() {
+  localStorage.setItem(guideDbKey, JSON.stringify(guideDb));
+}
+
+function sanitizeGuidePdfs(raw) {
+  const o = raw && typeof raw === "object" ? raw : {};
+  return {
+    de: sanitizeStoredCustomerContractPdf(o.de),
+    en: sanitizeStoredCustomerContractPdf(o.en),
+    es: sanitizeStoredCustomerContractPdf(o.es)
+  };
+}
+
+function sanitizeGuideEntry(raw) {
+  const o = raw && typeof raw === "object" ? raw : {};
+  return {
+    id: typeof o.id === "string" && o.id.trim() ? o.id.trim() : createId(),
+    nameDe: String(o.nameDe || "").trim().slice(0, 120),
+    nameEn: String(o.nameEn || "").trim().slice(0, 120),
+    pdfs: sanitizeGuidePdfs(o.pdfs)
+  };
+}
+
+function guideHasAnyPdf(pdfs) {
+  const p = sanitizeGuidePdfs(pdfs);
+  return Boolean(p.de || p.en || p.es);
+}
+
+function getGuideDisplayName(entry) {
+  const e = entry && typeof entry === "object" ? entry : {};
+  if (WC && WC.getLocale() === "en") {
+    const en = String(e.nameEn || "").trim();
+    if (en) return en;
+  }
+  const de = String(e.nameDe || "").trim();
+  if (de) return de;
+  return String(e.nameEn || "").trim() || "—";
+}
+
+function compareGuidesForDisplay(a, b) {
+  return getGuideDisplayName(a).localeCompare(getGuideDisplayName(b), "de", { sensitivity: "base" });
+}
+
+function getGuideDbEntriesForDisplay() {
+  return [...guideDb].sort(compareGuidesForDisplay);
+}
+
+function readGuidePdfFile(file) {
+  return new Promise((resolve) => {
+    if (!file) {
+      resolve(null);
+      return;
+    }
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(String(file.name || ""));
+    if (!isPdf) {
+      showToast(t("toast.contractPdfType"));
+      resolve(null);
+      return;
+    }
+    if (file.size > MAX_CUSTOMER_CONTRACT_PDF_BYTES) {
+      showToast(t("toast.contractPdfSize"));
+      resolve(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = String(reader.result || "");
+      if (!data.startsWith("data:application/pdf")) {
+        showToast(t("toast.contractPdfType"));
+        resolve(null);
+        return;
+      }
+      let name = String(file.name || "anleitung.pdf").trim().slice(0, 120) || "anleitung.pdf";
+      if (!name.toLowerCase().endsWith(".pdf")) name = `${name}.pdf`;
+      resolve({ name, data });
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderGuidePdfStatusInForm(lang) {
+  const statusEl = el[`guidePdf${lang.charAt(0).toUpperCase()}${lang.slice(1)}Status`];
+  const removeEl = el[`guidePdf${lang.charAt(0).toUpperCase()}${lang.slice(1)}Remove`];
+  const pdf = pendingGuidePdfs[lang];
+  if (!statusEl || !removeEl) return;
+  if (!pdf || !pdf.data) {
+    statusEl.innerHTML = "";
+    removeEl.classList.add("hidden");
+    return;
+  }
+  statusEl.innerHTML = `<small>${escapeHtml(t("guide.pdfStored"))} ${escapeHtml(pdf.name || "anleitung.pdf")}</small>`;
+  removeEl.classList.remove("hidden");
+}
+
+function renderAllGuidePdfStatusesInForm() {
+  GUIDE_PDF_LANGS.forEach((lang) => renderGuidePdfStatusInForm(lang));
+}
+
+function resetGuideDbForm() {
+  activeGuideDbId = "";
+  pendingGuidePdfs = { de: null, en: null, es: null };
+  if (el.guideDbForm) el.guideDbForm.reset();
+  GUIDE_PDF_LANGS.forEach((lang) => {
+    const input = el[`guidePdf${lang.charAt(0).toUpperCase()}${lang.slice(1)}`];
+    if (input) input.value = "";
+  });
+  renderAllGuidePdfStatusesInForm();
+  if (el.guideDbSaveButton) el.guideDbSaveButton.textContent = t("guide.save");
+}
+
+function downloadGuidePdf(entry, lang) {
+  const pdfs = sanitizeGuidePdfs(entry && entry.pdfs);
+  const pdf = pdfs[lang];
+  if (!pdf) {
+    showToast(t("guide.noPdf"));
+    return;
+  }
+  const link = document.createElement("a");
+  link.href = pdf.data;
+  link.download = pdf.name || "anleitung.pdf";
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function renderGuideDownloadButtons(entry, includeAdmin) {
+  const pdfs = sanitizeGuidePdfs(entry.pdfs);
+  const langLabels = { de: "guide.downloadDe", en: "guide.downloadEn", es: "guide.downloadEs" };
+  const downloads = GUIDE_PDF_LANGS.filter((lang) => pdfs[lang])
+    .map((lang) => `<button class="text-button" type="button" data-download-guide="${escapeHtml(entry.id)}" data-pdf-lang="${lang}">${escapeHtml(t(langLabels[lang]))}</button>`)
+    .join("");
+  const admin = includeAdmin
+    ? `
+      <button class="text-button" type="button" data-edit-guide="${escapeHtml(entry.id)}">${escapeHtml(t("guide.edit"))}</button>
+      <button class="text-button" type="button" data-delete-guide="${escapeHtml(entry.id)}">${escapeHtml(t("guide.delete"))}</button>`
+    : "";
+  return `<div class="guide-db-downloads">${downloads}${admin}</div>`;
+}
+
+function renderGuideDb() {
+  if (!el.guideDbList) return;
+  const isChef = isFullChefSession();
+  if (el.guideDbForm) el.guideDbForm.classList.toggle("hidden", !isChef);
+  if (!guideDb.length) {
+    el.guideDbList.innerHTML = `<div class="guide-db-item"><p>${escapeHtml(t("guide.empty"))}</p></div>`;
+    return;
+  }
+
+  el.guideDbList.innerHTML = getGuideDbEntriesForDisplay().map((entry) => {
+    const title = getGuideDisplayName(entry);
+    const namesSub = t("guide.namesSub", { de: entry.nameDe || "—", en: entry.nameEn || "—" });
+    return `
+      <article class="guide-db-item" data-guide-id="${escapeHtml(entry.id)}">
+        <div class="guide-db-item-head">
+          <strong>${escapeHtml(title)}</strong>
+          ${isChef ? `<span class="guide-db-item-sub">${escapeHtml(namesSub)}</span>` : ""}
+        </div>
+        ${renderGuideDownloadButtons(entry, isChef)}
+      </article>`;
+  }).join("");
+
+  el.guideDbList.querySelectorAll("[data-download-guide]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-download-guide");
+      const lang = btn.getAttribute("data-pdf-lang");
+      const entry = guideDb.find((g) => g.id === id);
+      if (entry && lang) downloadGuidePdf(entry, lang);
+    });
+  });
+  el.guideDbList.querySelectorAll("[data-edit-guide]").forEach((btn) => {
+    btn.addEventListener("click", () => startEditGuideEntry(btn.getAttribute("data-edit-guide")));
+  });
+  el.guideDbList.querySelectorAll("[data-delete-guide]").forEach((btn) => {
+    btn.addEventListener("click", () => deleteGuideEntry(btn.getAttribute("data-delete-guide")));
+  });
+}
+
+function addGuideEntry(nameDe, nameEn, pdfs) {
+  const record = sanitizeGuideEntry({
+    id: createId(),
+    nameDe,
+    nameEn,
+    pdfs: sanitizeGuidePdfs(pdfs)
+  });
+  guideDb.unshift(record);
+  persistGuideDb();
+  renderGuideDb();
+}
+
+function updateGuideEntry(id, nameDe, nameEn, pdfs) {
+  const index = guideDb.findIndex((g) => g.id === id);
+  if (index < 0) return;
+  guideDb[index] = sanitizeGuideEntry(Object.assign({}, guideDb[index], {
+    nameDe,
+    nameEn,
+    pdfs: sanitizeGuidePdfs(pdfs)
+  }));
+  persistGuideDb();
+  renderGuideDb();
+}
+
+function startEditGuideEntry(id) {
+  const entry = guideDb.find((g) => g.id === id);
+  if (!entry || !isFullChefSession()) return;
+  activeGuideDbId = id;
+  if (el.guideNameDe) el.guideNameDe.value = entry.nameDe || "";
+  if (el.guideNameEn) el.guideNameEn.value = entry.nameEn || "";
+  pendingGuidePdfs = sanitizeGuidePdfs(entry.pdfs);
+  GUIDE_PDF_LANGS.forEach((lang) => {
+    const input = el[`guidePdf${lang.charAt(0).toUpperCase()}${lang.slice(1)}`];
+    if (input) input.value = "";
+  });
+  renderAllGuidePdfStatusesInForm();
+  if (el.guideDbSaveButton) el.guideDbSaveButton.textContent = t("guide.saveUpdate");
+  showToast(t("toast.guideLoaded"));
+  if (el.guideDbForm) el.guideDbForm.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function deleteGuideEntry(id) {
+  guideDb = guideDb.filter((g) => g.id !== id);
+  persistGuideDb();
+  if (activeGuideDbId === id) resetGuideDbForm();
+  renderGuideDb();
+  showToast(t("toast.guideDeleted"));
+}
+
+function positionGuideDbNavTab() {
+  if (!el.guideDbTab || !el.moduleTabs) return;
+  if (isFullChefSession() && el.customerDbTab) {
+    const next = el.customerDbTab.nextElementSibling;
+    if (next !== el.guideDbTab) {
+      el.moduleTabs.insertBefore(el.guideDbTab, el.customerDbTab.nextSibling);
+    }
+    return;
+  }
+  if (el.moduleTabs.lastElementChild !== el.guideDbTab) {
+    el.moduleTabs.appendChild(el.guideDbTab);
+  }
 }
 
 /**
@@ -1683,6 +2342,72 @@ function sanitizeStoredChecklistPhoto(photo) {
   if (!data) return null;
   const name = typeof photo.name === "string" && photo.name.trim() ? photo.name.trim().slice(0, 120) : "photo.jpg";
   return { name, data };
+}
+
+function sanitizeStoredCustomerContractPdf(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const data = typeof raw.data === "string" && raw.data.startsWith("data:application/pdf") ? raw.data : "";
+  if (!data) return null;
+  let name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim().slice(0, 120) : "Kundenvertrag.pdf";
+  if (!name.toLowerCase().endsWith(".pdf")) name = `${name}.pdf`;
+  return { name, data };
+}
+
+function readCustomerContractPdfFile(file) {
+  return new Promise((resolve) => {
+    if (!file) {
+      resolve(null);
+      return;
+    }
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(String(file.name || ""));
+    if (!isPdf) {
+      showToast(t("toast.contractPdfType"));
+      resolve(null);
+      return;
+    }
+    if (file.size > MAX_CUSTOMER_CONTRACT_PDF_BYTES) {
+      showToast(t("toast.contractPdfSize"));
+      resolve(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = String(reader.result || "");
+      if (!data.startsWith("data:application/pdf")) {
+        showToast(t("toast.contractPdfType"));
+        resolve(null);
+        return;
+      }
+      let name = String(file.name || "Kundenvertrag.pdf").trim().slice(0, 120) || "Kundenvertrag.pdf";
+      if (!name.toLowerCase().endsWith(".pdf")) name = `${name}.pdf`;
+      resolve({ name, data });
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderCustomerContractStatusInDb() {
+  if (!el.dbContractStatus || !el.dbContractRemove) return;
+  if (!pendingCustomerContractPdf || !pendingCustomerContractPdf.data) {
+    el.dbContractStatus.innerHTML = "";
+    el.dbContractRemove.classList.add("hidden");
+    return;
+  }
+  el.dbContractStatus.innerHTML = `<small>${escapeHtml(t("cust.contractStored"))} ${escapeHtml(pendingCustomerContractPdf.name || "Kundenvertrag.pdf")}</small>`;
+  el.dbContractRemove.classList.remove("hidden");
+}
+
+function downloadCustomerContractPdf(entry) {
+  const pdf = sanitizeStoredCustomerContractPdf(entry && entry.contractPdf);
+  if (!pdf) return;
+  const link = document.createElement("a");
+  link.href = pdf.data;
+  link.download = pdf.name || "Kundenvertrag.pdf";
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 function renderCustomerOrientationPreviewInDb() {
@@ -2055,9 +2780,9 @@ function getEmployeeLabelByUsername(username) {
 }
 
 function getAvailableSections() {
-  if (isFullChefSession()) return ["checklist", "workOrder", "customerDb", "calendar", "worktime", "checkpoints"];
-  if (currentSession && currentSession.role === "employee") return ["checklist", "workOrder", "calendar", "worktime"];
-  return ["checklist", "workOrder", "calendar", "worktime"];
+  if (isFullChefSession()) return ["checklist", "workOrder", "customerDb", "guideDb", "calendar", "worktime", "checkpoints"];
+  if (currentSession && currentSession.role === "employee") return ["checklist", "workOrder", "calendar", "worktime", "guideDb"];
+  return ["checklist", "workOrder", "calendar", "worktime", "guideDb"];
 }
 
 function setActiveSection(section) {
@@ -2071,12 +2796,17 @@ function setActiveSection(section) {
   if (section === "workOrder") {
     renderWorkOrdersPanel();
   }
+  if (section === "guideDb") {
+    renderGuideDb();
+  }
 }
 
 function renderSectionVisibility() {
   const isFullChef = isFullChefSession();
   const isRestrictedBoss = isRestrictedBossSession();
   el.customerDbTab.classList.toggle("hidden", !isFullChef);
+  if (el.guideDbTab) el.guideDbTab.classList.remove("hidden");
+  positionGuideDbNavTab();
   el.worktimeTab.classList.remove("hidden");
   el.checkpointTab.classList.toggle("hidden", !isFullChef);
   el.moduleTabButtons.forEach((button) => {
@@ -2085,6 +2815,7 @@ function renderSectionVisibility() {
 
   el.checklistSection.classList.toggle("hidden", activeSection !== "checklist");
   el.customerDbPanel.classList.toggle("hidden", activeSection !== "customerDb" || !isFullChef);
+  if (el.guideDbPanel) el.guideDbPanel.classList.toggle("hidden", activeSection !== "guideDb");
   el.calendarPanel.classList.toggle("hidden", activeSection !== "calendar");
   if (el.workOrdersPanel) el.workOrdersPanel.classList.toggle("hidden", activeSection !== "workOrder");
   el.worktimePanel.classList.toggle("hidden", activeSection !== "worktime");
@@ -2111,6 +2842,8 @@ function renderSectionVisibility() {
       el.pageTitle.textContent = t("page.workOrder");
     } else if (activeSection === "customerDb") {
       el.pageTitle.textContent = t("page.customerDb");
+    } else if (activeSection === "guideDb") {
+      el.pageTitle.textContent = t("page.guideDb");
     } else if (activeSection === "checkpoints") {
       el.pageTitle.textContent = t("page.checkpoints");
     }
@@ -2166,6 +2899,13 @@ function login(username, password, remember = false) {
   currentSession = { username: user.username, role: user.role, label: user.label };
   if (Array.isArray(user.manageEmployeeUsernames) && user.manageEmployeeUsernames.length) {
     currentSession.manageEmployeeUsernames = user.manageEmployeeUsernames.slice();
+  }
+  if (Array.isArray(user.allowedChecklistTemplateIds) && user.allowedChecklistTemplateIds.length) {
+    currentSession.allowedChecklistTemplateIds = user.allowedChecklistTemplateIds.slice();
+    const defaultTpl = user.allowedChecklistTemplateIds[0];
+    checkpointManagerTemplateId = defaultTpl;
+    activeFormChecklistTemplateId = defaultTpl;
+    lastCustomerCheckpointTemplateChoice = defaultTpl;
   }
   persistSession(currentSession, remember);
   applyDefaultStatusFiltersOnLogin(user.role);
@@ -2392,13 +3132,13 @@ function renderCalendarChecklistTemplateCheckboxes(preselectedIds) {
   if (!el.calendarChecklistTemplateCheckboxes) return;
   let selected;
   if (Array.isArray(preselectedIds)) {
-    const known = new Set(checklistTemplates.map((tpl) => tpl.id));
+    const known = new Set(getChecklistTemplatesForSession().map((tpl) => tpl.id));
     selected = preselectedIds.map((id) => String(id || "").trim()).filter((id) => known.has(id));
   } else {
     selected = getSelectedCalendarTemplateIds();
   }
   el.calendarChecklistTemplateCheckboxes.innerHTML = "";
-  checklistTemplates.forEach((tmpl) => {
+  getChecklistTemplatesForSession().forEach((tmpl) => {
     const row = document.createElement("label");
     row.className = "calendar-template-check";
     const input = document.createElement("input");
@@ -2424,9 +3164,11 @@ function renderCalendarChecklistTemplateCheckboxes(preselectedIds) {
 function populateChecklistFormTemplateSelect(enabled) {
   if (!el.checklistTemplateSelect) return;
   const user = currentSession && currentSession.username;
-  const allowed = checklistTemplates.filter((template) => (
-    currentRole === "boss" || !user || templateAllowsEmployee(template, user)
-  ));
+  const allowed = checklistTemplates.filter((template) => {
+    if (currentRole === "boss" && !sessionMayAccessChecklistTemplate(template.id)) return false;
+    if (currentRole === "boss") return true;
+    return !user || templateAllowsEmployee(template, user);
+  });
   el.checklistTemplateSelect.innerHTML = allowed.map((t) => `
     <option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>
   `).join("");
@@ -2556,9 +3298,12 @@ function setChecklistEditability(isEditable) {
 function resetCustomerDbForm() {
   activeCustomerDbId = "";
   pendingCustomerOrientationPhoto = null;
+  pendingCustomerContractPdf = null;
   el.customerDbForm.reset();
   if (el.dbOrientationPhoto) el.dbOrientationPhoto.value = "";
+  if (el.dbContractPdf) el.dbContractPdf.value = "";
   renderCustomerOrientationPreviewInDb();
+  renderCustomerContractStatusInDb();
   populateCustomerCheckpointTemplateSelect();
   initPendingCustomerCheckpointSetsBlank();
   if (el.customerCheckpointTemplateSelect && el.customerCheckpointTemplateSelect.value) {
@@ -2755,8 +3500,16 @@ function saveCheckpoint() {
   const nextDef = normalizeCheckpointDef({ de: deIn, en: enIn }, { explicit: true });
 
   const dedupeDe = nextDef.de.trim().toLowerCase();
+  let zoneForDedupe = "";
+  if (tplId === HAUS_CHECKLIST_TEMPLATE_ID) {
+    zoneForDedupe = el.checkpointHausZone && el.checkpointHausZone.value
+      ? el.checkpointHausZone.value.trim()
+      : DEFAULT_HAUS_CHECKPOINT_ZONE;
+    if (!isHausCheckpointZoneId(zoneForDedupe)) zoneForDedupe = DEFAULT_HAUS_CHECKPOINT_ZONE;
+  }
   const duplicateIndex = list.findIndex((it, ix) => {
     if (ix === activeCheckpointEditIndex) return false;
+    if (tplId === HAUS_CHECKLIST_TEMPLATE_ID && hausCheckpointZoneFromDef(it) !== zoneForDedupe) return false;
     const o = normalizeCheckpointDef(it, { explicit: true });
     if (dedupeDe) return o.de.trim().toLowerCase() === dedupeDe;
     return o.en.trim().toLowerCase() === nextDef.en.trim().toLowerCase();
@@ -2766,8 +3519,6 @@ function saveCheckpoint() {
     return false;
   }
 
-  const newCanon = checkpointCanonical(nextDef);
-
   let rowToStore = nextDef;
   if (tplId === HAUS_CHECKLIST_TEMPLATE_ID) {
     let z = el.checkpointHausZone && el.checkpointHausZone.value ? el.checkpointHausZone.value.trim() : DEFAULT_HAUS_CHECKPOINT_ZONE;
@@ -2775,22 +3526,28 @@ function saveCheckpoint() {
     rowToStore = Object.assign({}, nextDef, { zone: z });
   }
 
+  const newStorageKey = tplId === HAUS_CHECKLIST_TEMPLATE_ID
+    ? hausCheckpointRowKey(rowToStore)
+    : checkpointCanonical(nextDef);
+
   if (activeCheckpointEditIndex >= 0) {
-    oldCanon = checkpointCanonical(list[activeCheckpointEditIndex]);
+    oldCanon = tplId === HAUS_CHECKLIST_TEMPLATE_ID
+      ? hausCheckpointRowKey(list[activeCheckpointEditIndex])
+      : checkpointCanonical(list[activeCheckpointEditIndex]);
     list[activeCheckpointEditIndex] = rowToStore;
-    if (oldCanon !== newCanon) {
+    if (oldCanon !== newStorageKey) {
       customerDb = customerDb.map((entry) => {
         const nextEntry = Object.assign({}, entry);
         migrateCustomerCheckpointSetsIfNeeded(nextEntry);
         nextEntry.checkpointSets[tplId] = (nextEntry.checkpointSets[tplId] || []).map((point) => (
-          point === oldCanon ? newCanon : point
+          point === oldCanon ? newStorageKey : point
         ));
         syncCustomerLegacyCheckpointsField(nextEntry);
         return nextEntry;
       });
       persistCustomerDb();
       customerDb.forEach((entry) => {
-        syncDraftSubmissionsForCustomer(entry.id, tplId, entry.checkpointSets[tplId] || [], { [oldCanon]: newCanon });
+        syncDraftSubmissionsForCustomer(entry.id, tplId, entry.checkpointSets[tplId] || [], { [oldCanon]: newStorageKey });
       });
     }
     showToast(t("toast.cpUpdated"));
@@ -2811,7 +3568,9 @@ function deleteCheckpoint(index) {
   const tplId = checkpointManagerTemplateId;
   const list = managingCheckpointList();
   if (!list || !list[index]) return;
-  const removedName = checkpointCanonical(list[index]);
+  const removedName = tplId === HAUS_CHECKLIST_TEMPLATE_ID
+    ? hausCheckpointRowKey(list[index])
+    : checkpointCanonical(list[index]);
   list.splice(index, 1);
 
   customerDb = customerDb.map((entry) => {
@@ -3281,6 +4040,17 @@ async function deleteChecklist(id) {
 }
 
 function buildReportText(entry) {
+  if (isWorkOrderReportEntry(entry)) {
+    return [
+      t("preview.greeting", { name: entry.customerName }),
+      "",
+      ...customerReportParagraphsForEntry(entry).flatMap((p) => [p, ""]),
+      t("preview.team"),
+      "",
+      t("report.contract.sectionScope"),
+      getWorkOrderClosingReportText(entry) || t("wo.reportScopeEmpty")
+    ].filter(Boolean).join("\n");
+  }
   const done = entry.items.filter((item) => item.checked).length;
   const open = entry.items.length - done;
   const itemLines = entry.items.map((item) => {
@@ -3308,8 +4078,6 @@ function buildReportText(entry) {
 }
 
 function buildReportHtml(entry) {
-  const done = entry.items.filter((item) => item.checked).length;
-  const open = entry.items.length - done;
   const serviceProviderName = t("report.contract.providerName");
   const serviceProviderEmail = t("report.contract.providerEmail");
   const serviceProviderPhone = t("report.contract.providerPhone");
@@ -3319,10 +4087,55 @@ function buildReportHtml(entry) {
   const customerPhone = customerContact.phone;
   const customerEmail = customerContact.email;
   const reportDate = formatDateDayOnly(entry.approvedAt || entry.submittedAt || entry.createdAt || new Date().toISOString());
-  const checklistLabel = (getChecklistTemplateById(entry.checklistTemplateId || HAUS_CHECKLIST_TEMPLATE_ID) || {}).name
-    || entry.checklistTemplateName
-    || t("sub.tplFallback");
-  const customerReportParagraphs = [t("preview.introP1"), t("preview.introP2"), t("preview.introP3")];
+  const checklistLabel = isWorkOrderReportEntry(entry)
+    ? t("wo.reportTypeLabel")
+    : ((getChecklistTemplateById(entry.checklistTemplateId || HAUS_CHECKLIST_TEMPLATE_ID) || {}).name
+      || entry.checklistTemplateName
+      || t("sub.tplFallback"));
+  const customerReportParagraphs = customerReportParagraphsForEntry(entry);
+  if (isWorkOrderReportEntry(entry)) {
+    const closingHtml = formatWorkOrderClosingReportHtml(getWorkOrderClosingReportText(entry));
+    return `
+    <div class="contract-report">
+      <div class="contract-report-headline-top">${escapeHtml(t("report.contract.brand"))}</div>
+      <h2 class="contract-report-title">${escapeHtml(t("report.contract.title"))}</h2>
+      <div class="contract-report-subtitle">${escapeHtml(checklistLabel)}</div>
+      <div class="contract-report-tagline">${escapeHtml(t("preview.team"))}</div>
+
+      <div class="contract-report-party-grid">
+        <section class="contract-report-party">
+          <h3>${escapeHtml(t("report.contract.providerHead"))}</h3>
+          <p><strong>${escapeHtml(serviceProviderName)}</strong></p>
+          <p>${escapeHtml(serviceProviderEmail)}</p>
+          <p>${escapeHtml(serviceProviderPhone)}</p>
+        </section>
+        <section class="contract-report-party">
+          <h3>${escapeHtml(t("report.contract.clientHead"))}</h3>
+          <p><strong>${escapeHtml(customerName)}</strong></p>
+          <p>${escapeHtml(customerAddress)}</p>
+          <p>${escapeHtml(customerPhone)}</p>
+          <p>${escapeHtml(customerEmail)}</p>
+        </section>
+      </div>
+
+      <p class="contract-report-intro">
+        ${escapeHtml(t("report.contract.performedOn", { date: reportDate }))}
+      </p>
+
+      <section class="contract-report-section">
+        <h3>${escapeHtml(t("report.contract.sectionCustomerReport"))}</h3>
+        ${customerReportParagraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("")}
+      </section>
+
+      <section class="contract-report-section contract-report-scope-closing">
+        <h3>${escapeHtml(t("report.contract.sectionScope"))}</h3>
+        <div class="work-order-closing-report-body">${closingHtml}</div>
+      </section>
+    </div>
+  `;
+  }
+  const done = entry.items.filter((item) => item.checked).length;
+  const open = entry.items.length - done;
   return `
     <div class="contract-report">
       <div class="contract-report-headline-top">${escapeHtml(t("report.contract.brand"))}</div>
@@ -3453,11 +4266,13 @@ async function generateCustomerReportPdfBlob(entry) {
   const customerAddress = customerContact.address;
   const customerPhone = customerContact.phone;
   const customerEmail = customerContact.email;
-  const customerReportParagraphs = [t("preview.introP1"), t("preview.introP2"), t("preview.introP3")];
+  const customerReportParagraphs = customerReportParagraphsForEntry(entry);
   const reportDate = formatDateDayOnly(entry.approvedAt || entry.submittedAt || entry.createdAt || new Date().toISOString());
-  const checklistLabel = (getChecklistTemplateById(entry.checklistTemplateId || HAUS_CHECKLIST_TEMPLATE_ID) || {}).name
-    || entry.checklistTemplateName
-    || t("sub.tplFallback");
+  const checklistLabel = isWorkOrderReportEntry(entry)
+    ? t("wo.reportTypeLabel")
+    : ((getChecklistTemplateById(entry.checklistTemplateId || HAUS_CHECKLIST_TEMPLATE_ID) || {}).name
+      || entry.checklistTemplateName
+      || t("sub.tplFallback"));
   const done = entry.items.filter((item) => item.checked).length;
   const open = entry.items.length - done;
 
@@ -3580,30 +4395,35 @@ async function generateCustomerReportPdfBlob(entry) {
   y += 3.5;
 
   sectionTitle(t("report.contract.sectionScope"));
-  drawParagraph(t("preview.summary", { done, total: entry.items.length, open }), margin, contentW, 9.5, false, text);
-  y += 2.5;
-
-  const items = entry.items || [];
-  items.forEach((item) => {
-    const label = itemDisplayForSubmissionItem(item, entry.checklistTemplateId);
-    const dotColor = item.checked ? [52, 146, 74] : [196, 46, 30];
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.2);
-    doc.setTextColor(muted[0], muted[1], muted[2]);
-    const lines = doc.splitTextToSize(label, contentW - 13);
-    lines.forEach((line, idx) => {
-      ensureSpace(lineH + 0.4);
-      y += lineH;
-      if (idx === 0) {
-        doc.setFillColor(dotColor[0], dotColor[1], dotColor[2]);
-        doc.circle(margin + 3.1, y - 1.55, 1.55, "F");
-      }
-      doc.text(line, margin + 8, y);
+  if (isWorkOrderReportEntry(entry)) {
+    const closingText = getWorkOrderClosingReportText(entry) || t("wo.reportScopeEmpty");
+    drawParagraph(closingText, margin, contentW, 9.5, false, text);
+    y += 2.5;
+  } else {
+    drawParagraph(t("preview.summary", { done, total: entry.items.length, open }), margin, contentW, 9.5, false, text);
+    y += 2.5;
+    const items = entry.items || [];
+    items.forEach((item) => {
+      const label = itemDisplayForSubmissionItem(item, entry.checklistTemplateId);
+      const dotColor = item.checked ? [52, 146, 74] : [196, 46, 30];
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.2);
+      doc.setTextColor(muted[0], muted[1], muted[2]);
+      const lines = doc.splitTextToSize(label, contentW - 13);
+      lines.forEach((line, idx) => {
+        ensureSpace(lineH + 0.4);
+        y += lineH;
+        if (idx === 0) {
+          doc.setFillColor(dotColor[0], dotColor[1], dotColor[2]);
+          doc.circle(margin + 3.1, y - 1.55, 1.55, "F");
+        }
+        doc.text(line, margin + 8, y);
+      });
+      y += 2.2;
     });
-    y += 2.2;
-  });
+  }
 
-  if (entry.bossComment) {
+  if (entry.bossComment && !isWorkOrderReportEntry(entry)) {
     y += 1.5;
     sectionTitle(t("report.contract.sectionNotes"));
     drawParagraph(entry.bossComment, margin, contentW, 9.5, false, muted);
@@ -3638,7 +4458,7 @@ async function generateCustomerReportPdfBlob(entry) {
         continue;
       }
       y += size.h + 4;
-      if (ph.name) {
+      if (ph.name && !isWorkOrderReportEntry(entry)) {
         drawParagraph(ph.name, margin, contentW, 8.5, false, muted);
       }
       y += 2;
@@ -4196,11 +5016,11 @@ function ensureBossChecklistFilterOptions() {
   const preserved = el.bossChecklistFilter.value;
   el.bossChecklistFilter.innerHTML = [
     `<option value="all">${escapeHtml(t("boss.allChecklists"))}</option>`,
-    ...checklistTemplates.map((template) => `
+    ...getChecklistTemplatesForSession().map((template) => `
       <option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>
     `)
   ].join("");
-  const keepPrev = preserved === "all" || checklistTemplates.some((item) => item.id === preserved);
+  const keepPrev = preserved === "all" || getChecklistTemplatesForSession().some((item) => item.id === preserved);
   el.bossChecklistFilter.value = keepPrev ? preserved : "all";
 }
 
@@ -4214,9 +5034,7 @@ function renderLists() {
   const checklistFilterVal = el.bossChecklistFilter ? el.bossChecklistFilter.value : "all";
   const filteredByStatus = filter === "all" ? submissions : submissions.filter((entry) => entry.status === filter);
   const bossScope = canUseBossFilters
-    ? (isRestrictedBossSession()
-      ? filteredByStatus.filter(submissionBelongsToManagedEmployee)
-      : filteredByStatus)
+    ? filteredByStatus.filter((entry) => assertBossMayAccessSubmission(entry))
     : filteredByStatus;
   const filteredForBoss = canUseBossFilters
     ? bossScope.filter((entry) => {
@@ -4376,6 +5194,65 @@ function buildWorkOrderListCardHtml(row, isSelected, showEmployeeInCard) {
   `;
 }
 
+function buildWorkOrderChefReportSectionHtml(row) {
+  const { dateIso, entry, stateRow, status } = row;
+  if (!isWorkOrderManagementViewer() || status !== "done") return "";
+  const reportEntry = buildWorkOrderReportEntry(row);
+  const syncedEmail = resolveCustomerEmailForEntry(reportEntry) || "";
+  if (syncedEmail) reportEntry.customerEmail = syncedEmail;
+  const reportHtml = buildReportHtml(reportEntry);
+  const mailDraftUrl = buildMailPreviewUrl(reportEntry);
+  const bossComment = stateRow && stateRow.bossComment ? stateRow.bossComment : "";
+  const emailSentAt = stateRow && stateRow.emailSentAt ? stateRow.emailSentAt : "";
+  const deleteBtn = `<button class="danger-button" type="button" data-wo-action="delete-work-order" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}">${escapeHtml(t("review.delete"))}</button>`;
+  const sendActions = emailSentAt
+    ? `
+          <a class="secondary-button" href="${mailDraftUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("review.mailDraft"))}</a>
+          <button class="secondary-button" type="button" data-wo-action="download-report" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}" aria-label="${escapeHtml(t("review.downloadPdfAria"))}">${escapeHtml(t("review.downloadPdf"))}</button>
+          <button class="secondary-button" type="button" data-wo-action="resend-report" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}">${escapeHtml(t("wo.resendReport"))}</button>
+          ${deleteBtn}`
+    : `
+          <button class="primary-button" type="button" data-wo-action="send-report" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}">${escapeHtml(t("review.approve"))}</button>
+          <button class="secondary-button" type="button" data-wo-action="download-report" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}" aria-label="${escapeHtml(t("review.downloadPdfAria"))}">${escapeHtml(t("review.downloadPdf"))}</button>
+          ${deleteBtn}`;
+  return `
+        <label class="review-comment">
+          ${escapeHtml(t("wo.closingReport"))}
+          <textarea class="work-order-boss-comment" rows="4">${escapeHtml(bossComment)}</textarea>
+        </label>
+        <details class="report-preview report-preview--collapsible">
+          <summary class="report-preview-summary" title="${escapeHtml(t("review.customerReportToggleHint"))}">${escapeHtml(t("review.customerReport"))}</summary>
+          <div class="report-preview-collapse-inner">${reportHtml}</div>
+        </details>
+        <div class="review-actions">${sendActions}
+        </div>`;
+}
+
+function buildWorkOrderChefReviewHeaderHtml(row) {
+  const { dateIso, entry, stateRow, status } = row;
+  if (!isWorkOrderManagementViewer()) return "";
+  const empLabel = getEmployeeLabelByUsername(entry.employeeUsername || "");
+  const projectTitle = String(entry.project || "").trim() || String(entry.customerName || "").trim() || t("wo.reportTitleFallback");
+  const emailSentAt = stateRow && stateRow.emailSentAt ? stateRow.emailSentAt : "";
+  const reportEntry = buildWorkOrderReportEntry(row);
+  const syncedEmail = resolveCustomerEmailForEntry(reportEntry) || "";
+  const statusBadgeCls = workOrderListBadgeStatusClass(status);
+  return `
+        <div class="review-header">
+          <div>
+            <span class="badge ${statusBadgeCls}">${escapeHtml(workOrderStatusLabel(status))}</span>
+            <h2>${escapeHtml(projectTitle)}</h2>
+          </div>
+          <div class="status-pill"><span class="dot"></span>${emailSentAt ? `${escapeHtml(t("review.emailSentPrefix"))} ${formatDate(emailSentAt)}` : escapeHtml(t("review.notSentYet"))}</div>
+        </div>
+        <div class="info-grid">
+          <div><span>${escapeHtml(t("review.lbl.customer"))}</span><strong>${escapeHtml(entry.customerName || "\u2014")}</strong></div>
+          <div><span>${escapeHtml(t("review.lbl.email"))}</span><strong>${escapeHtml(syncedEmail || "\u2014")}</strong></div>
+          <div><span>${escapeHtml(t("review.lbl.employee"))}</span><strong>${escapeHtml(empLabel)}</strong></div>
+          <div><span>${escapeHtml(t("wo.reportTypeLabel"))}</span><strong>${escapeHtml(formatDateDayOnly(dateIso))} \u00b7 ${escapeHtml(entry.fromTime || "")}\u2013${escapeHtml(entry.toTime || "")}</strong></div>
+        </div>`;
+}
+
 function buildWorkOrderArticleHtml(row) {
   const { dateIso, entry, stateRow, status, employeeReply } = row;
   const labelDate = new Intl.DateTimeFormat(intlLocaleSafe(), { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(dateIso));
@@ -4399,9 +5276,9 @@ function buildWorkOrderArticleHtml(row) {
       if (!src) return "";
       return `<div class="calendar-wo-photo-tile work-order-result-tile"><img src="${src}" alt="${escapeHtml(ph.name || "photo")}" /><button type="button" class="text-button calendar-wo-photo-remove" data-wo-action="remove-result-photo" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}" data-wo-photo-index="${i}" aria-label="${escapeHtml(t("wo.removePhoto"))}">\u00d7</button></div>`;
     }).join("");
-    const atMax = resultImgs.length >= WORK_ORDER_MAX_CHEF_PHOTOS;
+    const atMax = resultImgs.length >= WORK_ORDER_MAX_RESULT_PHOTOS;
     resultPhotosHtml = `<div class="work-order-result-upload">
-      <p class="work-order-subline"><strong>${escapeHtml(t("wo.resultPhotosLbl"))}</strong> <span class="muted">(${resultImgs.length}/${WORK_ORDER_MAX_CHEF_PHOTOS})</span></p>
+      <p class="work-order-subline"><strong>${escapeHtml(t("wo.resultPhotosLbl"))}</strong> <span class="muted">${escapeHtml(t("wo.resultPhotosOptional"))} (${resultImgs.length}/${WORK_ORDER_MAX_RESULT_PHOTOS})</span></p>
       <div class="calendar-wo-photo-preview work-order-result-preview">${tiles}</div>
       <input type="file" class="work-order-result-file-input" accept="image/*" multiple data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}" />
       <button type="button" class="secondary-button work-order-result-pick-btn" data-wo-action="pick-result-photos" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}" ${atMax ? "disabled" : ""}>${escapeHtml(t("wo.pickResultPhotos"))}</button>
@@ -4462,8 +5339,12 @@ function buildWorkOrderArticleHtml(row) {
   const chefMetaCell = isWoMgr
     ? `<div class="work-order-data-cell"><strong>${escapeHtml(t("wo.empLbl"))}</strong> ${escapeHtml(empLabel)}</div>`
     : "";
-  return `
-      <article class="work-order-card work-order-detail-card" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}">
+  const chefReviewHeader = buildWorkOrderChefReviewHeaderHtml(row);
+  const chefReportSection = buildWorkOrderChefReportSectionHtml(row);
+  const chefDeleteHtml = isWoMgr && status !== "done"
+    ? `<div class="review-actions work-order-delete-actions"><button class="danger-button" type="button" data-wo-action="delete-work-order" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}">${escapeHtml(t("review.delete"))}</button></div>`
+    : "";
+  const employeeHeadHtml = isWoMgr ? "" : `
         <div class="work-order-card-head">
           <span class="work-order-status work-order-status-${escapeHtml(status)}">${escapeHtml(workOrderStatusLabel(status))}</span>
           <span class="work-order-date">${escapeHtml(labelDate)} \u00b7 ${escapeHtml(entry.fromTime || "")}\u2013${escapeHtml(entry.toTime || "")}</span>
@@ -4472,7 +5353,10 @@ function buildWorkOrderArticleHtml(row) {
           ${chefMetaCell}
           <div class="work-order-data-cell"><strong>${escapeHtml(t("wo.nameLbl"))}</strong> ${escapeHtml(entry.customerName || "\u2014")}</div>
           <div class="work-order-data-cell"><strong>${escapeHtml(t("wo.addrLbl"))}</strong> ${escapeHtml(entry.customerAddress || "\u2014")}</div>
-        </div>
+        </div>`;
+  return `
+      <article class="work-order-card work-order-detail-card${isWoMgr ? " work-order-detail-card--review" : ""}" data-wo-assignment="${escapeHtml(entry.id)}" data-wo-date="${escapeHtml(dateIso)}">
+        ${isWoMgr ? chefReviewHeader : employeeHeadHtml}
         <p class="work-order-instruction"><strong>${escapeHtml(t("wo.instrLbl"))}</strong> ${escapeHtml(entry.staffComment || t("common.emDash"))}</p>
         ${workOrderTimeDocHtml}
         ${chefPhotosHtml}
@@ -4480,6 +5364,8 @@ function buildWorkOrderArticleHtml(row) {
         ${replyChefHtml}
         ${replyEmployeeHtml}
         ${chefSendBackHtml}
+        ${chefReportSection}
+        ${chefDeleteHtml}
         ${actions ? `<div class="actions work-order-actions">${actions}</div>` : ""}
       </article>
     `;
@@ -4598,6 +5484,44 @@ function handleWorkOrdersPanelClick(event) {
   if (!assignmentId || !dateIso) return;
   const card = btn.closest(".work-order-card");
   const replyTa = card ? card.querySelector("textarea.work-order-reply-input") : null;
+  const bossCommentTa = card ? card.querySelector("textarea.work-order-boss-comment") : null;
+  if (action === "delete-work-order") {
+    if (!isWorkOrderManagementViewer()) return;
+    deleteWorkOrderAssignment(assignmentId, dateIso);
+    return;
+  }
+  if (action === "download-report") {
+    const rowPayload = findWorkOrderRowPayload(assignmentId, dateIso);
+    if (!rowPayload) return;
+    if (bossCommentTa) persistWorkOrderBossComment(assignmentId, dateIso, bossCommentTa.value);
+    const reportEntry = buildWorkOrderReportEntry(findWorkOrderRowPayload(assignmentId, dateIso) || rowPayload);
+    void downloadCustomerReportPdf(reportEntry);
+    return;
+  }
+  if (action === "send-report" || action === "resend-report") {
+    if (!isWorkOrderManagementViewer()) return;
+    let rowPayload = findWorkOrderRowPayload(assignmentId, dateIso);
+    if (!rowPayload || rowPayload.status !== "done") return;
+    if (bossCommentTa) persistWorkOrderBossComment(assignmentId, dateIso, bossCommentTa.value);
+    rowPayload = findWorkOrderRowPayload(assignmentId, dateIso) || rowPayload;
+    const sendBtn = btn;
+    let prevLabel = "";
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      prevLabel = sendBtn.textContent;
+      sendBtn.textContent = t("review.approveBusy");
+    }
+    void sendWorkOrderCustomerReport(rowPayload, { silent: true }).then((sent) => {
+      if (sent) showToast(t("toast.approved"));
+    }).finally(() => {
+      renderWorkOrdersPanel();
+      if (sendBtn && sendBtn.isConnected) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = prevLabel || t("review.approve");
+      }
+    });
+    return;
+  }
   if (action === "pick-result-photos") {
     const inp = card ? card.querySelector(".work-order-result-file-input") : null;
     if (inp && !inp.disabled) inp.click();
@@ -5416,7 +6340,59 @@ function renderWorktimeSummary() {
   refreshCheckpointStaffUi();
 }
 
-function renderCustomerDb() {
+function collectOpenCustomerDbItemIds() {
+  if (!el.customerDbList) return new Set();
+  const open = new Set();
+  el.customerDbList.querySelectorAll("details.customer-db-item[data-customer-id][open]").forEach((node) => {
+    const id = node.getAttribute("data-customer-id");
+    if (id) open.add(id);
+  });
+  return open;
+}
+
+function wireCustomerDbMonthSelects(detailsRow) {
+  if (!detailsRow) return;
+  detailsRow.querySelectorAll(".customer-extra-month-select").forEach((sel) => {
+    sel.addEventListener("mousedown", (ev) => ev.stopPropagation());
+    sel.addEventListener("click", (ev) => ev.stopPropagation());
+  });
+}
+
+function collectOpenCustomerDbSubsectionKeys() {
+  if (!el.customerDbList) return new Set();
+  const open = new Set();
+  el.customerDbList.querySelectorAll("details.customer-db-subsection[open]").forEach((node) => {
+    const cid = node.getAttribute("data-customer-id");
+    const kind = node.getAttribute("data-subsection");
+    if (cid && kind) open.add(`${cid}::${kind}`);
+  });
+  return open;
+}
+
+function customerDbSubsectionShouldBeOpen(openSubsections, customerId, kind) {
+  return openSubsections.has(`${customerId}::${kind}`);
+}
+
+function sanitizeCustomerStatus(raw) {
+  return raw === CUSTOMER_STATUS_INACTIVE ? CUSTOMER_STATUS_INACTIVE : CUSTOMER_STATUS_ACTIVE;
+}
+
+function isCustomerActive(entry) {
+  return sanitizeCustomerStatus(entry && entry.status) === CUSTOMER_STATUS_ACTIVE;
+}
+
+function compareCustomersForDbList(a, b) {
+  const aActive = isCustomerActive(a);
+  const bActive = isCustomerActive(b);
+  if (aActive !== bActive) return aActive ? -1 : 1;
+  return customerStammFullName(a).localeCompare(customerStammFullName(b), "de", { sensitivity: "base" });
+}
+
+function getCustomerDbEntriesForDisplay() {
+  return [...customerDb].sort(compareCustomersForDbList);
+}
+
+function renderCustomerDb(preserveOpenCustomerId) {
   if (!el.customerDbList) return;
 
   if (!customerDb.length) {
@@ -5424,8 +6400,14 @@ function renderCustomerDb() {
     return;
   }
 
+  const openCustomerIds = collectOpenCustomerDbItemIds();
+  const keepOpenId = String(preserveOpenCustomerId || "").trim();
+  if (keepOpenId) openCustomerIds.add(keepOpenId);
+  const openSubsections = collectOpenCustomerDbSubsectionKeys();
   el.customerDbList.innerHTML = "";
-  customerDb.forEach((entry) => {
+  const allWorkTimeRecords = collectAllCustomerWorkTimeRecords();
+  getCustomerDbEntriesForDisplay().forEach((entry) => {
+    const customerActive = isCustomerActive(entry);
     const mapsUrl = buildCustomerMapsUrl(entry);
     const customerFullName = `${entry.firstName} ${entry.lastName}`.trim();
     const history = submissions
@@ -5438,11 +6420,82 @@ function renderCustomerDb() {
       .sort((a, b) => new Date(b.createdAt || b.submittedAt || 0) - new Date(a.createdAt || a.submittedAt || 0));
     const ledgerAll = Array.isArray(entry.extraCostLedger) ? [...entry.extraCostLedger] : [];
     const monthsForCust = collectLedgerMonthKeysForCustomer(entry);
+    const monthsForWork = collectCustomerWorkTimeMonthKeys(entry.id, allWorkTimeRecords);
+    const monthsCombined = [...new Set([...monthsForCust, ...monthsForWork])].sort().reverse();
     let monthFilter = customerDbExtraMonthByCustomerId[entry.id] || "";
-    if (monthFilter && !monthsForCust.includes(monthFilter)) {
+    if (monthFilter && !monthsCombined.includes(monthFilter)) {
       delete customerDbExtraMonthByCustomerId[entry.id];
       monthFilter = "";
     }
+    let workMonthFilter = customerDbWorkMonthByCustomerId[entry.id] || "";
+    if (workMonthFilter && !monthsForWork.includes(workMonthFilter)) {
+      delete customerDbWorkMonthByCustomerId[entry.id];
+      workMonthFilter = "";
+    }
+    const workMonthSelectHtml = `
+          <select class="customer-extra-month-select" data-work-month="${escapeHtml(entry.id)}" aria-label="${escapeHtml(t("cust.workMonthFilterAria"))}">
+            <option value="">${escapeHtml(t("cust.extraMonthAll"))}</option>
+            ${monthsForWork.map((m) => `
+            <option value="${escapeHtml(m)}"${m === workMonthFilter ? " selected" : ""}>${escapeHtml(formatMonthKeyForFilterLabel(m))}</option>
+            `).join("")}
+          </select>`;
+    const workRowsAll = allWorkTimeRecords.filter((r) => r.customerId === entry.id);
+    const workRowsFiltered = workMonthFilter
+      ? workRowsAll.filter((r) => r.monthKey === workMonthFilter)
+      : [...workRowsAll].sort((a, b) => String(`${b.dateIso}-${b.source}`).localeCompare(String(`${a.dateIso}-${a.source}`)));
+    const workChecklistSum = workRowsFiltered
+      .filter((r) => r.source === "checklist")
+      .reduce((s, r) => s + r.minutes, 0);
+    const workOrderSum = workRowsFiltered
+      .filter((r) => r.source === "workorder")
+      .reduce((s, r) => s + r.minutes, 0);
+    const workTotalSum = workChecklistSum + workOrderSum;
+    const showWorkMonthCol = !workMonthFilter;
+    const workTableRows = workRowsFiltered
+      .map((r) => `
+        <tr>
+          ${showWorkMonthCol ? `<td>${escapeHtml(formatMonthKeyForFilterLabel(r.monthKey))}</td>` : ""}
+          <td>${escapeHtml(formatDateDayOnly(r.dateIso))}</td>
+          <td>${escapeHtml(r.source === "workorder" ? t("cust.workSourceWorkOrder") : t("cust.workSourceChecklist"))}</td>
+          <td>${escapeHtml(r.employeeLabel)}</td>
+          <td>${escapeHtml(r.detail)}</td>
+          <td class="customer-work-time-duration">${escapeHtml(formatMinutes(r.minutes))}</td>
+        </tr>
+      `)
+      .join("");
+    const workSubOpen = customerDbSubsectionShouldBeOpen(openSubsections, entry.id, "work");
+    const workTimeSection = `
+        <details class="customer-db-subsection customer-work-time customer-extra-costs" data-customer-id="${escapeHtml(entry.id)}" data-subsection="work"${workSubOpen ? " open" : ""}>
+          <summary class="customer-db-subsection-summary">
+            <div class="customer-extra-costs-head customer-db-subsection-head">
+              <strong>${escapeHtml(t("cust.workTimeTitle"))}</strong>
+              ${workMonthSelectHtml}
+            </div>
+          </summary>
+          <div class="customer-db-subsection-body">
+          ${workRowsFiltered.length
+            ? `
+            <table class="customer-extra-ledger-table customer-work-time-table">
+              <thead>
+                <tr>
+                  ${showWorkMonthCol ? `<th>${escapeHtml(t("cust.extraColMonth"))}</th>` : ""}
+                  <th>${escapeHtml(t("cust.workColDate"))}</th>
+                  <th>${escapeHtml(t("cust.workColSource"))}</th>
+                  <th>${escapeHtml(t("cust.workColEmployee"))}</th>
+                  <th>${escapeHtml(t("cust.workColDetail"))}</th>
+                  <th>${escapeHtml(t("cust.workColNet"))}</th>
+                </tr>
+              </thead>
+              <tbody>${workTableRows}</tbody>
+            </table>
+            <p class="customer-extra-ledger-sum customer-work-time-sum">
+              <strong>${escapeHtml(t("cust.workSumTotal"))}</strong> ${escapeHtml(formatMinutes(workTotalSum))}
+              <span class="customer-work-time-sum-detail">(${escapeHtml(t("cust.workSumChecklist"))} ${escapeHtml(formatMinutes(workChecklistSum))} · ${escapeHtml(t("cust.workSumWorkOrder"))} ${escapeHtml(formatMinutes(workOrderSum))})</span>
+            </p>`
+            : `<small>${escapeHtml(t("cust.workTimeEmpty"))}</small>`
+          }
+          </div>
+        </details>`;
     const monthFilterSelectHtml = `
           <select class="customer-extra-month-select" data-extra-month="${escapeHtml(entry.id)}" aria-label="${escapeHtml(t("cust.extraMonthFilterAria"))}">
             <option value="">${escapeHtml(t("cust.extraMonthAll"))}</option>
@@ -5468,12 +6521,16 @@ function renderCustomerDb() {
         </tr>
       `)
       .join("");
+    const extraSubOpen = customerDbSubsectionShouldBeOpen(openSubsections, entry.id, "extra");
     const ledgerSection = `
-        <div class="customer-extra-costs">
-          <div class="customer-extra-costs-head">
-            <strong>${escapeHtml(t("cust.extraLedgerTitle"))}</strong>
-            ${monthFilterSelectHtml}
-          </div>
+        <details class="customer-db-subsection customer-extra-costs" data-customer-id="${escapeHtml(entry.id)}" data-subsection="extra"${extraSubOpen ? " open" : ""}>
+          <summary class="customer-db-subsection-summary">
+            <div class="customer-extra-costs-head customer-db-subsection-head">
+              <strong>${escapeHtml(t("cust.extraLedgerTitle"))}</strong>
+              ${monthFilterSelectHtml}
+            </div>
+          </summary>
+          <div class="customer-db-subsection-body">
           ${ledgerFiltered.length
             ? `
             <table class="customer-extra-ledger-table">
@@ -5491,9 +6548,12 @@ function renderCustomerDb() {
             <p class="customer-extra-ledger-sum"><strong>${escapeHtml(t("cust.extraSum"))}</strong> ${escapeHtml(formatEuroCustomerAmount(ledgerSum))}</p>`
             : `<small>${escapeHtml(t("cust.extraLedgerEmpty"))}</small>`
           }
-        </div>`;
+          </div>
+        </details>`;
     const row = document.createElement("details");
-    row.className = "customer-db-item";
+    row.className = `customer-db-item${customerActive ? "" : " customer-db-item--inactive"}`;
+    row.setAttribute("data-customer-id", entry.id);
+    if (openCustomerIds.has(entry.id)) row.setAttribute("open", "");
     migrateCustomerCheckpointSetsIfNeeded(entry);
     const checkpointBlocksHtml = checklistTemplates.map((template) => {
       const pts = getCustomerCheckpointsForTemplate(entry, template.id);
@@ -5504,7 +6564,7 @@ function renderCustomerDb() {
         const wanted = new Set(pts);
         const blocks = HAUS_CHECKPOINT_ZONE_IDS.map((zoneId) => {
           const labels = (template.checkpoints || [])
-            .filter((def) => wanted.has(checkpointCanonical(def)) && hausCheckpointZoneFromDef(def) === zoneId)
+            .filter((def) => hausCheckpointZoneFromDef(def) === zoneId && hausStoredKeySetHasDef(wanted, def))
             .map((def) => checkpointDefLabelDeSlashEn(def));
           if (!labels.length) return "";
           return `
@@ -5526,7 +6586,7 @@ function renderCustomerDb() {
     row.innerHTML = `
       <summary class="customer-db-summary">
         <div class="customer-db-summary-main">
-          <p><strong>${escapeHtml(entry.firstName)} ${escapeHtml(entry.lastName)}</strong></p>
+          <p><strong>${escapeHtml(entry.firstName)} ${escapeHtml(entry.lastName)}</strong>${customerActive ? "" : ` <span class="customer-status-badge">${escapeHtml(t("cust.statusInactive"))}</span>`}</p>
           <small>${escapeHtml(entry.address || "-")}</small>
           <small>${escapeHtml(entry.email || "-")} · ${escapeHtml(entry.phone || "-")}</small>
         </div>
@@ -5562,10 +6622,15 @@ function renderCustomerDb() {
             `}
         </div>
         ${ledgerSection}
+        ${workTimeSection}
         <div class="customer-db-actions">
           ${mapsUrl ? `<a class="text-button" href="${mapsUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("cust.maps"))}</a>` : ""}
           <button class="text-button" type="button" data-toggle-checkpoints="${entry.id}">${escapeHtml(t("cust.checkpoints"))}</button>
+          ${sanitizeStoredCustomerContractPdf(entry.contractPdf)
+    ? `<button class="text-button" type="button" data-download-contract="${entry.id}">${escapeHtml(t("cust.contractDownload"))}</button>`
+    : ""}
           <button class="text-button" type="button" data-edit-id="${entry.id}">${escapeHtml(t("cust.edit"))}</button>
+          <button class="text-button" type="button" data-toggle-status="${entry.id}">${escapeHtml(customerActive ? t("cust.deactivate") : t("cust.reactivate"))}</button>
           <button class="text-button" type="button" data-id="${entry.id}">${escapeHtml(t("cust.delete"))}</button>
         </div>
         <div class="customer-checkpoints-list hidden" data-checkpoint-list="${entry.id}">
@@ -5575,8 +6640,14 @@ function renderCustomerDb() {
     `;
     const deleteCustomerButton = row.querySelector('[data-id]');
     if (deleteCustomerButton) deleteCustomerButton.addEventListener("click", () => deleteCustomerEntry(entry.id));
+    const downloadContractButton = row.querySelector('[data-download-contract]');
+    if (downloadContractButton) {
+      downloadContractButton.addEventListener("click", () => downloadCustomerContractPdf(entry));
+    }
     const editCustomerButton = row.querySelector('[data-edit-id]');
     if (editCustomerButton) editCustomerButton.addEventListener("click", () => startEditCustomerEntry(entry.id));
+    const toggleStatusButton = row.querySelector('[data-toggle-status]');
+    if (toggleStatusButton) toggleStatusButton.addEventListener("click", () => toggleCustomerEntryStatus(entry.id));
     const openHistoryButton = row.querySelector('[data-open-history]');
     if (openHistoryButton) openHistoryButton.addEventListener("click", () => {
       const historySelect = row.querySelector(`[data-history-select="${entry.id}"]`);
@@ -5593,6 +6664,11 @@ function renderCustomerDb() {
       event.currentTarget.textContent = listEl.classList.contains("hidden")
         ? t("cust.checkpoints")
         : t("cust.checkpointsHide");
+    });
+    wireCustomerDbMonthSelects(row);
+    row.querySelectorAll(".customer-history-select").forEach((sel) => {
+      sel.addEventListener("mousedown", (ev) => ev.stopPropagation());
+      sel.addEventListener("click", (ev) => ev.stopPropagation());
     });
     el.customerDbList.appendChild(row);
   });
@@ -5666,7 +6742,7 @@ function syncCustomerDisplayNameAcrossApp(customerId, previousFullName, nextFull
   return touched;
 }
 
-function addCustomerEntry(firstName, lastName, address, coordinates, project, email, phone, orientationPhoto) {
+function addCustomerEntry(firstName, lastName, address, coordinates, project, email, phone, orientationPhoto, contractPdf) {
   const sets = collectCheckpointSetsForCustomerSave();
   const record = {
     id: createId(),
@@ -5678,6 +6754,8 @@ function addCustomerEntry(firstName, lastName, address, coordinates, project, em
     email,
     phone,
     orientationPhoto: sanitizeStoredChecklistPhoto(orientationPhoto),
+    contractPdf: sanitizeStoredCustomerContractPdf(contractPdf),
+    status: CUSTOMER_STATUS_ACTIVE,
     checkpointSets: sets,
     checkpoints: [...(sets[HAUS_CHECKLIST_TEMPLATE_ID] || [])]
   };
@@ -5688,7 +6766,7 @@ function addCustomerEntry(firstName, lastName, address, coordinates, project, em
   renderCalendarCustomerOptions();
 }
 
-function updateCustomerEntry(id, firstName, lastName, address, coordinates, project, email, phone, orientationPhoto) {
+function updateCustomerEntry(id, firstName, lastName, address, coordinates, project, email, phone, orientationPhoto, contractPdf) {
   const index = customerDb.findIndex((entry) => entry.id === id);
   if (index < 0) return;
   const prev = customerDb[index];
@@ -5703,6 +6781,7 @@ function updateCustomerEntry(id, firstName, lastName, address, coordinates, proj
     email,
     phone,
     orientationPhoto: sanitizeStoredChecklistPhoto(orientationPhoto),
+    contractPdf: sanitizeStoredCustomerContractPdf(contractPdf),
     checkpointSets: sets,
     checkpoints: [...(sets[HAUS_CHECKLIST_TEMPLATE_ID] || [])]
   });
@@ -5729,16 +6808,31 @@ function startEditCustomerEntry(id) {
   el.dbEmail.value = entry.email || "";
   el.dbPhone.value = entry.phone || "";
   pendingCustomerOrientationPhoto = sanitizeStoredChecklistPhoto(entry.orientationPhoto);
+  pendingCustomerContractPdf = sanitizeStoredCustomerContractPdf(entry.contractPdf);
   if (el.dbOrientationPhoto) el.dbOrientationPhoto.value = "";
+  if (el.dbContractPdf) el.dbContractPdf.value = "";
   renderCustomerOrientationPreviewInDb();
+  renderCustomerContractStatusInDb();
   populateCustomerCheckpointTemplateSelect();
   initPendingCustomerCheckpointSetsFromEntry(entry);
   renderCustomerCheckpointOptions(pendingCustomerCheckpointSets[el.customerCheckpointTemplateSelect.value] || []);
   showToast(t("toast.custLoaded"));
 }
 
+function toggleCustomerEntryStatus(id) {
+  const index = customerDb.findIndex((entry) => entry.id === id);
+  if (index < 0) return;
+  const prev = customerDb[index];
+  const nextStatus = isCustomerActive(prev) ? CUSTOMER_STATUS_INACTIVE : CUSTOMER_STATUS_ACTIVE;
+  customerDb[index] = Object.assign({}, prev, { status: nextStatus });
+  persistCustomerDb();
+  renderCustomerDb(id);
+  showToast(nextStatus === CUSTOMER_STATUS_ACTIVE ? t("toast.custStatusActive") : t("toast.custStatusInactive"));
+}
+
 function deleteCustomerEntry(id) {
   delete customerDbExtraMonthByCustomerId[id];
+  delete customerDbWorkMonthByCustomerId[id];
   customerDb = customerDb.filter((entry) => entry.id !== id);
   persistCustomerDb();
   renderCustomerDb();
@@ -5904,6 +6998,10 @@ function createChecklistFromAssignment(entry, templateIdExplicit) {
     return;
   }
   if (!allowedTplIds.includes(templateIdFromAssignment)) {
+    showToast(t("toast.tplDenied"));
+    return;
+  }
+  if (!sessionMayAccessChecklistTemplate(templateIdFromAssignment)) {
     showToast(t("toast.tplDenied"));
     return;
   }
@@ -6138,7 +7236,7 @@ function renderCalendarStaff() {
     const checklistOwnerLabel = getEmployeeLabelByUsername(checklistOwnerUsername);
     const viewerUsername = currentSession ? currentSession.username : "";
     const canOpenChecklist = !checklistOwnerUsername || viewerUsername === checklistOwnerUsername;
-    const assignedTplIds = normalizeAssignmentTemplateIds(entry);
+    const assignedTplIds = normalizeAssignmentTemplateIds(entry).filter((tid) => sessionMayAccessChecklistTemplate(tid));
     const checklistNamesCsv = isWorkOrderAssignment(entry)
       ? t("wo.calRowType")
       : assignedTplIds
@@ -7697,9 +8795,18 @@ if (el.calendarNewAssignmentButton) el.calendarNewAssignmentButton.addEventListe
 if (el.customerDbList) {
   el.customerDbList.addEventListener("change", (e) => {
     const target = e.target;
-    if (!target || target.tagName !== "SELECT" || !target.getAttribute("data-extra-month")) return;
-    customerDbExtraMonthByCustomerId[target.getAttribute("data-extra-month")] = target.value;
-    renderCustomerDb();
+    if (!target || target.tagName !== "SELECT") return;
+    const extraMonthId = target.getAttribute("data-extra-month");
+    const workMonthId = target.getAttribute("data-work-month");
+    if (extraMonthId) {
+      customerDbExtraMonthByCustomerId[extraMonthId] = target.value;
+      renderCustomerDb(extraMonthId);
+      return;
+    }
+    if (workMonthId) {
+      customerDbWorkMonthByCustomerId[workMonthId] = target.value;
+      renderCustomerDb(workMonthId);
+    }
   });
 }
 if (el.dbOrientationPhoto) {
@@ -7734,6 +8841,65 @@ if (el.dbOrientationRemove) {
     renderCustomerOrientationPreviewInDb();
   });
 }
+if (el.dbContractPdf) {
+  el.dbContractPdf.addEventListener("change", async () => {
+    const file = el.dbContractPdf.files && el.dbContractPdf.files[0];
+    if (!file) return;
+    pendingCustomerContractPdf = await readCustomerContractPdfFile(file);
+    renderCustomerContractStatusInDb();
+    if (el.dbContractPdf) el.dbContractPdf.value = "";
+  });
+}
+if (el.dbContractRemove) {
+  el.dbContractRemove.addEventListener("click", () => {
+    pendingCustomerContractPdf = null;
+    if (el.dbContractPdf) el.dbContractPdf.value = "";
+    renderCustomerContractStatusInDb();
+  });
+}
+GUIDE_PDF_LANGS.forEach((lang) => {
+  const suffix = lang.charAt(0).toUpperCase() + lang.slice(1);
+  const input = el[`guidePdf${suffix}`];
+  const removeBtn = el[`guidePdf${suffix}Remove`];
+  if (input) {
+    input.addEventListener("change", async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const uploaded = await readGuidePdfFile(file);
+      if (uploaded) pendingGuidePdfs[lang] = uploaded;
+      renderGuidePdfStatusInForm(lang);
+      input.value = "";
+    });
+  }
+  if (removeBtn) {
+    removeBtn.addEventListener("click", () => {
+      pendingGuidePdfs[lang] = null;
+      if (input) input.value = "";
+      renderGuidePdfStatusInForm(lang);
+    });
+  }
+});
+if (el.guideDbForm) {
+  el.guideDbForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!isFullChefSession()) return;
+    const nameDe = el.guideNameDe ? el.guideNameDe.value.trim() : "";
+    const nameEn = el.guideNameEn ? el.guideNameEn.value.trim() : "";
+    const pdfs = sanitizeGuidePdfs(pendingGuidePdfs);
+    if (!guideHasAnyPdf(pdfs)) {
+      showToast(t("toast.guidePdfRequired"));
+      return;
+    }
+    if (activeGuideDbId) {
+      updateGuideEntry(activeGuideDbId, nameDe, nameEn, pdfs);
+      showToast(t("toast.guideUpd"));
+    } else {
+      addGuideEntry(nameDe, nameEn, pdfs);
+      showToast(t("toast.guideAdd"));
+    }
+    resetGuideDbForm();
+  });
+}
 el.customerDbForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const normalizedAddress = normalizeLocationInput(el.dbAddress.value);
@@ -7746,7 +8912,8 @@ el.customerDbForm.addEventListener("submit", (event) => {
     el.dbProject.value.trim(),
     el.dbEmail.value.trim(),
     el.dbPhone.value.trim(),
-    pendingCustomerOrientationPhoto
+    pendingCustomerOrientationPhoto,
+    pendingCustomerContractPdf
   ];
   if (activeCustomerDbId) {
     updateCustomerEntry(activeCustomerDbId, ...values);
@@ -7871,6 +9038,7 @@ window.__wcOnLocaleChange = function () {
     hydrateEmployeeDailyCorrectionPanel();
     updateCalendarStaffSubmitButtonLabel();
     if (activeSection === "workOrder") renderWorkOrdersPanel();
+    if (activeSection === "guideDb") renderGuideDb();
     if (calendarPlanningOpen && el.calendarWorkOrderMode && el.calendarWorkOrderMode.checked) {
       updateCalendarWorkOrderModeUi();
       renderCalendarWorkOrderPhotos();
@@ -7907,6 +9075,7 @@ resetCalendarStaffFormState();
 syncCalendarStaffFormInitialState();
 resetForm();
 resetCustomerDbForm();
+resetGuideDbForm();
 refreshCheckpointStaffUi();
 if (currentSession && users.some((user) => user.username === currentSession.username && user.role === currentSession.role)) {
   el.sessionUser.textContent = `${currentSession.label} (${currentSession.username})`;

@@ -1574,6 +1574,11 @@ select.boss-status-select {
   margin-top: 8px;
 }
 
+.work-order-closing-report-body p {
+  margin: 0.35em 0;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 900px) {
   .contract-report-party-grid {
     grid-template-columns: 1fr;
@@ -2185,18 +2190,230 @@ select.boss-status-select {
   font-size: 14px;
 }
 
+.customer-db-subsection {
+  margin-top: 12px;
+  border: 1px solid #e8dcb8;
+  border-radius: 8px;
+  background: #fffdf6;
+}
+
+.customer-db-subsection-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 12px;
+}
+
+.customer-db-subsection-summary::-webkit-details-marker {
+  display: none;
+}
+
+.customer-db-subsection-head {
+  margin: 0;
+  pointer-events: none;
+}
+
+.customer-db-subsection-head .customer-extra-month-select {
+  pointer-events: auto;
+}
+
+.customer-db-subsection-summary::after {
+  content: "Ausklappen";
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted, #5c5348);
+}
+
+.customer-db-subsection[open] > .customer-db-subsection-summary::after {
+  content: "Zuklappen";
+}
+
+.customer-db-subsection-body {
+  padding: 0 12px 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.customer-db-subsection.customer-extra-costs,
+.customer-db-subsection.customer-work-time {
+  margin-top: 12px;
+  padding: 0;
+  border: 1px solid #e8dcb8;
+}
+
+.customer-work-time {
+  margin-top: 0;
+}
+
+.customer-work-time-duration {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.customer-work-time-sum-detail {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--muted, #5c5348);
+}
+
+.guide-db-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.guide-db-intro {
+  margin: 6px 0 0;
+  color: var(--muted, #5c5348);
+  font-size: 14px;
+  font-weight: normal;
+}
+
+.guide-db-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #e8dfd2;
+  border-radius: 12px;
+  background: #fffdf9;
+}
+
+.guide-pdf-uploads {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.guide-pdf-col {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.guide-pdf-upload {
+  display: grid;
+  gap: 6px;
+  color: #3f3f3f;
+  font-weight: 700;
+}
+
+.guide-pdf-status {
+  font-size: 13px;
+  color: var(--muted, #5c5348);
+  word-break: break-word;
+}
+
+.guide-pdf-status small {
+  display: block;
+}
+
+.guide-db-form .primary-button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.guide-db-list {
+  display: grid;
+  gap: 10px;
+}
+
+.guide-db-item {
+  border: 1px solid #e8dfd2;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 14px;
+}
+
+.guide-db-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.guide-db-item-head strong {
+  font-size: 17px;
+}
+
+.guide-db-item-sub {
+  font-size: 13px;
+  color: var(--muted, #5c5348);
+}
+
+.guide-db-downloads,
+.guide-db-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (max-width: 900px) {
+  .guide-pdf-uploads {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-db-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 .customer-db-form {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr)) auto;
   gap: 10px;
 }
 
-.customer-orientation-upload {
+.customer-db-media-pair {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.customer-db-media-col {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.customer-orientation-upload,
+.customer-contract-upload {
   display: grid;
   gap: 6px;
   color: #3f3f3f;
   font-weight: 700;
+}
+
+.customer-contract-status {
+  font-size: 13px;
+  color: var(--muted, #5c5348);
+  word-break: break-word;
+}
+
+.customer-contract-status small {
+  display: block;
+}
+
+#dbContractRemove {
+  justify-self: start;
+}
+
+@media (max-width: 720px) {
+  .customer-db-media-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+.customer-orientation-upload {
+  grid-column: auto;
 }
 
 .customer-orientation-preview {
@@ -2244,7 +2461,7 @@ select.boss-status-select {
 }
 
 .customer-checkpoints summary::after {
-  content: "Aufklappen";
+  content: "Ausklappen";
   font-size: 12px;
   font-weight: 700;
   color: var(--muted);
@@ -2361,6 +2578,23 @@ select.boss-status-select {
 .customer-db-list {
   display: grid;
   gap: 8px;
+}
+
+.customer-db-item--inactive {
+  opacity: 0.92;
+}
+
+.customer-status-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: middle;
+  color: #5c5348;
+  background: #efe8dc;
+  border: 1px solid #d8cfc0;
 }
 
 .customer-db-item {
@@ -3206,6 +3440,30 @@ select.boss-status-select {
 
 .work-orders-detail-body {
   min-height: min(560px, 70vh);
+}
+
+.work-order-detail-card--review {
+  border: none;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.work-orders-detail-body .review-header {
+  margin-top: 0;
+}
+
+.work-orders-detail-body .review-header h2 {
+  font-size: 26px;
+}
+
+.employee-checklist-layout .employee-checklist-review-panel {
+  min-height: 560px;
+}
+
+.employee-checklist-layout .employee-checklist-list-panel,
+.work-orders-review-layout .list-panel {
+  align-self: start;
 }
 
 .work-order-list-card:focus-visible {
