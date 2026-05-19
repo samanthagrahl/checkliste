@@ -254,6 +254,10 @@
     "wt.dailyTitle": ["Tagesarbeitszeit", "Daily working time"],
     "wt.date": ["Datum", "Date"],
     "wt.dateAria": ["Datum für Arbeitszeiten", "Date for working hours"],
+    "wt.overviewHint": [
+      "Zeiten können nur am heutigen Tag erfasst werden. Andere Tage dienen nur der Übersicht.",
+      "Times can only be recorded on today’s date. Other dates are for overview only."
+    ],
     "wt.come": ["Kommen", "Arrival"],
     "wt.leave": ["Gehen", "Departure"],
     "wt.capture": ["Zeit erfassen", "Record time"],
@@ -648,6 +652,10 @@
     "toast.corrOk": ["Korrektur freigegeben – Zeiten sind übernommen.", "Correction approved – times updated."],
     "toast.corrRejected": ["Korrektur abgelehnt. Der Hinweis erscheint bei den Arbeitszeiten des Mitarbeiters.", "Correction rejected. The note appears under the employee’s working hours."],
     "toast.corrBlockStamp": ["Korrektur wartet auf Freigabe – keine weiteren Zeiten möglich.", "Correction pending – no further times allowed."],
+    "toast.wtStampTodayOnly": [
+      "Zeiten können nur am heutigen Tag erfasst werden.",
+      "Times can only be recorded on today’s date."
+    ],
     "toast.custLoaded": ["Kundendaten zum Bearbeiten geladen.", "Customer loaded for editing."],
     "toast.assignMissing": ["Einsatz wurde nicht gefunden.", "Assignment not found."],
     "toast.chkOpened": ["Checkliste wurde geöffnet.", "Checklist opened."],

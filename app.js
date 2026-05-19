@@ -982,6 +982,15 @@ enrichCurrentSessionFromUsers();
 let currentMailPreviewUrl = null;
 let staffSchedule = loadSchedule();
 let recurringScheduleRules = loadRecurringScheduleRules();
+(function migrateRecurringRulesEffectiveFrom() {
+  let changed = false;
+  recurringScheduleRules.forEach((rule) => {
+    if (!rule || String(rule.effectiveFromIso || "").trim()) return;
+    rule.effectiveFromIso = toIsoDate(new Date());
+    changed = true;
+  });
+  if (changed) persistRecurringScheduleRules();
+})();
 let workOrders = loadWorkOrders();
 let selectedCalendarDate = toIsoDate(new Date());
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -1112,6 +1121,7 @@ const el = {
   employeeDayWorkPanel: document.getElementById("employeeDayWorkPanel"),
   chefWorktimeSummaryPanel: document.getElementById("chefWorktimeSummaryPanel"),
   employeeWorkDate: document.getElementById("employeeWorkDate"),
+  employeeWorkDateHint: document.getElementById("employeeWorkDateHint"),
   dayWorkComeButton: document.getElementById("dayWorkComeButton"),
   dayWorkBreakStartButton: document.getElementById("dayWorkBreakStartButton"),
   dayWorkBreakEndButton: document.getElementById("dayWorkBreakEndButton"),
@@ -5679,6 +5689,8 @@ function matchesMonthlyCalendarDay(isoDate, monthlyDayRaw) {
 function ruleAppliesToIsoDate(rule, isoDate) {
   const deletedFromIso = String((rule && rule.deletedFromIso) || "").trim();
   if (deletedFromIso && isoDate >= deletedFromIso) return false;
+  const effectiveFromIso = String((rule && rule.effectiveFromIso) || "").trim();
+  if (effectiveFromIso && isoDate < effectiveFromIso) return false;
   const kind = getRuleRecurrenceKind(rule);
   if (kind === "weekly") {
     return Number(rule.weekday) === weekdayFromIsoDate(isoDate);
@@ -5761,9 +5773,6 @@ function getDayLoadReport(entryCount) {
   return { points: 0, tone: "", label: "" };
 }
 
-const DAILY_ATTENDANCE_MIN_PAUSE_MINUTES = 15;
-const DAILY_ATTENDANCE_GROSS_FOR_MIN_PAUSE_MINUTES = 6 * 60;
-
 function getRecordedDailyBreakMinutes(rec) {
   if (!rec) return 0;
   const pauseStartMin = parseTimeToMinutes(rec.breakStart);
@@ -5779,11 +5788,7 @@ function getDailyAttendanceNetMinutes(rec) {
   if (start === null || end === null || end <= start) return 0;
   const grossMinutes = end - start;
   const recordedBreakMinutes = getRecordedDailyBreakMinutes(rec);
-  const needsLegalMinimumPause = grossMinutes >= DAILY_ATTENDANCE_GROSS_FOR_MIN_PAUSE_MINUTES;
-  const effectivePauseMinutes = needsLegalMinimumPause
-    ? Math.min(grossMinutes, Math.max(recordedBreakMinutes, DAILY_ATTENDANCE_MIN_PAUSE_MINUTES))
-    : recordedBreakMinutes;
-  return Math.max(0, grossMinutes - effectivePauseMinutes);
+  return Math.max(0, grossMinutes - recordedBreakMinutes);
 }
 
 function getChecklistAttendanceNetMinutes(entry) {
@@ -5943,16 +5948,39 @@ function formatMinutes(totalMinutes) {
   return `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
 
+function getLocalTodayIsoDate() {
+  return toIsoDate(new Date());
+}
+
+function isEmployeeDailyWorkStampDay(dateIso) {
+  return String(dateIso || "").trim() === getLocalTodayIsoDate();
+}
+
+function syncEmployeeWorkDateInputForEmployee() {
+  if (!el.employeeWorkDate) return;
+  if (currentSession && currentSession.role === "employee") {
+    el.employeeWorkDate.max = getLocalTodayIsoDate();
+    el.employeeWorkDate.removeAttribute("min");
+  } else {
+    el.employeeWorkDate.removeAttribute("max");
+  }
+}
+
 function hydrateEmployeeDailyWorkForm() {
   if (!currentSession || currentSession.role !== "employee") return;
-  const dateIso = el.employeeWorkDate && el.employeeWorkDate.value ? el.employeeWorkDate.value : toIsoDate(new Date());
-  if (el.employeeWorkDate && !el.employeeWorkDate.value) el.employeeWorkDate.value = dateIso;
+  const todayIso = getLocalTodayIsoDate();
+  const dateIso = el.employeeWorkDate && el.employeeWorkDate.value ? el.employeeWorkDate.value : todayIso;
+  if (el.employeeWorkDate && !el.employeeWorkDate.value) el.employeeWorkDate.value = todayIso;
+  const stampToday = isEmployeeDailyWorkStampDay(dateIso);
   const rec = getDailyAttendanceRecord(currentSession.username, dateIso);
   const come = rec && rec.come ? rec.come : "";
   const leave = rec && rec.leave ? rec.leave : "";
   const breakStart = rec && rec.breakStart ? rec.breakStart : "";
   const breakEnd = rec && rec.breakEnd ? rec.breakEnd : "";
   const corrPending = Boolean(rec && rec.correction && rec.correction.status === "pending");
+  if (el.employeeWorkDateHint) {
+    el.employeeWorkDateHint.classList.toggle("hidden", stampToday);
+  }
   if (el.dayWorkComeDisplay) el.dayWorkComeDisplay.textContent = come || "-";
   if (el.dayWorkLeaveDisplay) el.dayWorkLeaveDisplay.textContent = leave || "-";
   if (el.dayWorkBreakStartDisplay) {
@@ -5961,10 +5989,10 @@ function hydrateEmployeeDailyWorkForm() {
   if (el.dayWorkBreakEndDisplay) {
     el.dayWorkBreakEndDisplay.textContent = breakEnd ? `${t("wt.endDisp")} ${breakEnd}` : `${t("wt.endDisp")} -`;
   }
-  if (el.dayWorkComeButton) el.dayWorkComeButton.disabled = Boolean(come || corrPending);
-  if (el.dayWorkLeaveButton) el.dayWorkLeaveButton.disabled = Boolean(leave || corrPending);
-  if (el.dayWorkBreakStartButton) el.dayWorkBreakStartButton.disabled = Boolean(breakStart || corrPending);
-  if (el.dayWorkBreakEndButton) el.dayWorkBreakEndButton.disabled = Boolean(breakEnd || corrPending);
+  if (el.dayWorkComeButton) el.dayWorkComeButton.disabled = Boolean(come || corrPending || !stampToday);
+  if (el.dayWorkLeaveButton) el.dayWorkLeaveButton.disabled = Boolean(leave || corrPending || !stampToday);
+  if (el.dayWorkBreakStartButton) el.dayWorkBreakStartButton.disabled = Boolean(breakStart || corrPending || !stampToday);
+  if (el.dayWorkBreakEndButton) el.dayWorkBreakEndButton.disabled = Boolean(breakEnd || corrPending || !stampToday);
   hydrateEmployeeDailyCorrectionPanel();
 }
 
@@ -6230,8 +6258,12 @@ function handleChefDailyCorrectionClick(event) {
 
 function stampDailyAttendance(type) {
   if (!currentSession || currentSession.role !== "employee" || !el.employeeWorkDate) return;
-  const dateIso = el.employeeWorkDate.value || toIsoDate(new Date());
+  const dateIso = el.employeeWorkDate.value || getLocalTodayIsoDate();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return;
+  if (!isEmployeeDailyWorkStampDay(dateIso)) {
+    showToast(t("toast.wtStampTodayOnly"));
+    return;
+  }
   const rec = getDailyAttendanceRecord(currentSession.username, dateIso);
   if (rec && rec.correction && rec.correction.status === "pending") {
     showToast(t("toast.corrBlockStamp"));
@@ -6257,8 +6289,9 @@ function stampDailyAttendance(type) {
 function renderEmployeeDailyWorkPanel() {
   if (!el.employeeDayWorkPanel || activeSection !== "worktime") return;
   if (!currentSession || currentSession.role !== "employee") return;
+  syncEmployeeWorkDateInputForEmployee();
   if (el.employeeWorkDate && !el.employeeWorkDate.value) {
-    el.employeeWorkDate.value = toIsoDate(new Date());
+    el.employeeWorkDate.value = getLocalTodayIsoDate();
   }
   hydrateEmployeeDailyWorkForm();
 }
@@ -7744,7 +7777,9 @@ function buildRecurringRulePayload(employee, customer, recurrenceKind, weekdayNu
     base.hausGartenZoneIds = hz.slice();
   }
   if (recurrenceKind === "biweekly") {
-    base.anchorIso = anchorIso || selectedCalendarDate;
+    const todayIso = toIsoDate(new Date());
+    const anchorCandidate = anchorIso || selectedCalendarDate;
+    base.anchorIso = anchorCandidate < todayIso ? todayIso : anchorCandidate;
   }
   if (recurrenceKind === "monthly") {
     base.monthlyDay = monthlyDom;
@@ -7826,7 +7861,8 @@ function addRecurringStaffRule(
         id: createId(),
         fromTime,
         toTime,
-        staffComment: staffComment || ""
+        staffComment: staffComment || "",
+        effectiveFromIso: toIsoDate(new Date())
       },
       extras
     )
@@ -7907,7 +7943,12 @@ function updateRecurringStaffRule(
     return false;
   }
 
-  const anchorUse = rk === "biweekly" ? (anchorIso || prev.anchorIso || selectedCalendarDate) : undefined;
+  let anchorUse;
+  if (rk === "biweekly") {
+    const todayIso = toIsoDate(new Date());
+    const rawAnchor = anchorIso || prev.anchorIso || selectedCalendarDate;
+    anchorUse = rawAnchor < todayIso ? todayIso : rawAnchor;
+  }
   const extras = buildRecurringRulePayload(employee, customer, rk, weekdayNumber, anchorUse, monthlyDom, tplIds, hausGartenZoneIds);
   const nextRule = Object.assign(
     {
@@ -7919,6 +7960,8 @@ function updateRecurringStaffRule(
     extras
   );
   if (prev.deletedFromIso) nextRule.deletedFromIso = prev.deletedFromIso;
+  if (prev.effectiveFromIso) nextRule.effectiveFromIso = prev.effectiveFromIso;
+  else nextRule.effectiveFromIso = toIsoDate(new Date());
   if (rk !== "biweekly") delete nextRule.anchorIso;
   if (rk !== "monthly") delete nextRule.monthlyDay;
   recurringScheduleRules[index] = nextRule;
