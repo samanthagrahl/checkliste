@@ -5956,6 +5956,11 @@ function isEmployeeDailyWorkStampDay(dateIso) {
   return String(dateIso || "").trim() === getLocalTodayIsoDate();
 }
 
+function canEmployeeStartCalendarAssignmentOnDate(dateIso) {
+  if (!currentSession || currentSession.role !== "employee") return true;
+  return isEmployeeDailyWorkStampDay(dateIso);
+}
+
 function syncEmployeeWorkDateInputForEmployee() {
   if (!el.employeeWorkDate) return;
   if (currentSession && currentSession.role === "employee") {
@@ -6971,12 +6976,12 @@ function buildWorkOrderCalendarButtonHtml(entry, canOpenWorkOrder, dateIso) {
   let label = t("wo.calBtnOpen");
   if (status === "in_progress") label = t("wo.calBtnResume");
   if (status === "done") label = t("wo.calBtnClosed");
-  const disabled = !canOpenWorkOrder || status === "done";
+  const disabled = !canOpenWorkOrder || status === "done" || !canEmployeeStartCalendarAssignmentOnDate(d);
   const btnClass = disabled ? "secondary-button" : "primary-button";
   return `<div class="calendar-checklist-actions"><button type="button" class="${btnClass} calendar-work-order-btn" data-action="work-order-open" ${disabled ? "disabled" : ""}>${escapeHtml(label)}</button></div>`;
 }
 
-function buildEmployeeCalendarChecklistButtonsHtml(entry, canOpenChecklist) {
+function buildEmployeeCalendarChecklistButtonsHtml(entry, canOpenChecklist, assignmentDateIso) {
   const ids = normalizeAssignmentTemplateIds(entry);
   const viewer = currentSession ? currentSession.username : "";
   const parts = [];
@@ -6992,7 +6997,8 @@ function buildEmployeeCalendarChecklistButtonsHtml(entry, canOpenChecklist) {
     else if (pendingSubmit) label = t("cal.btnTplPending", { name: tmpl ? tmpl.name : tid });
     else if (draft) label = t("cal.btnTplContinue", { name: tmpl ? tmpl.name : tid });
     else label = t("cal.btnTplStart", { name: tmpl ? tmpl.name : tid });
-    const disabled = !canOpenChecklist || approved || pendingSubmit;
+    const disabled = !canOpenChecklist || approved || pendingSubmit
+      || !canEmployeeStartCalendarAssignmentOnDate(assignmentDateIso);
     const btnClass = disabled ? "secondary-button" : "primary-button";
     parts.push(
       `<button type="button" class="${btnClass} calendar-checklist-tpl-btn" data-action="checklist-tpl" data-template-id="${escapeHtml(String(tid))}" ${disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`
@@ -7005,6 +7011,10 @@ function buildEmployeeCalendarChecklistButtonsHtml(entry, canOpenChecklist) {
 function createChecklistFromAssignment(entry, templateIdExplicit) {
   if (isWorkOrderAssignment(entry)) {
     showToast(t("wo.useWorkOrderTab"));
+    return;
+  }
+  if (!canEmployeeStartCalendarAssignmentOnDate(selectedCalendarDate)) {
+    showToast(t("toast.calStartTodayOnly"));
     return;
   }
   const dayEntries = staffSchedule[selectedCalendarDate] || [];
@@ -7278,7 +7288,7 @@ function renderCalendarStaff() {
     const checklistEmployeeActions = !isBoss
       ? (isWorkOrderAssignment(entry)
         ? buildWorkOrderCalendarButtonHtml(entry, canOpenChecklist, selectedCalendarDate)
-        : buildEmployeeCalendarChecklistButtonsHtml(entry, canOpenChecklist))
+        : buildEmployeeCalendarChecklistButtonsHtml(entry, canOpenChecklist, selectedCalendarDate))
       : "";
     const row = document.createElement("div");
     row.className = `staff-item staff-${entry.employeeUsername || "default"}`;
@@ -7340,6 +7350,10 @@ function renderCalendarStaff() {
     row.querySelectorAll('[data-action="work-order-open"]').forEach((woBtn) => {
       woBtn.addEventListener("click", () => {
         if (woBtn.disabled) return;
+        if (!canEmployeeStartCalendarAssignmentOnDate(selectedCalendarDate)) {
+          showToast(t("toast.calStartTodayOnly"));
+          return;
+        }
         ensureWorkOrderState(entry.id, selectedCalendarDate);
         setActiveSection("workOrder");
         renderWorkOrdersPanel();

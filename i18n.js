@@ -656,6 +656,10 @@
       "Zeiten können nur am heutigen Tag erfasst werden.",
       "Times can only be recorded on today’s date."
     ],
+    "toast.calStartTodayOnly": [
+      "Checklisten und Arbeitsaufträge können erst am Tag des Einsatzes gestartet werden.",
+      "Checklists and work orders can only be started on the assignment day."
+    ],
     "toast.custLoaded": ["Kundendaten zum Bearbeiten geladen.", "Customer loaded for editing."],
     "toast.assignMissing": ["Einsatz wurde nicht gefunden.", "Assignment not found."],
     "toast.chkOpened": ["Checkliste wurde geöffnet.", "Checklist opened."],
